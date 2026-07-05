@@ -1,7 +1,7 @@
 {
-  "name": "coldemail-slice1",
+  "name": "coldemail-slice2",
   "version": "1.0.0",
-  "description": "Slice 1: connect one SMTP inbox and send one email",
+  "description": "Slice 2: store connected inboxes in a database and send from them",
   "type": "module",
   "main": "server.js",
   "scripts": {
@@ -10,6 +10,7 @@
   "dependencies": {
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "nodemailer": "^6.9.14"
+    "nodemailer": "^6.9.14",
+    "pg": "^8.12.0"
   }
 }
