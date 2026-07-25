@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Coldwave</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;450;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0f13; --bg-2: #14171d; --bg-3: #1b1f27;
+    --line: #262b34; --line-2: #333a45;
+    --text: #eceef2; --muted: #8b93a1; --muted-2: #5f6773;
+    --accent: #7c7ff2; --accent-dim: #322f5e;
+    --green: #3ecf8e; --green-dim: #16342a;
+    --amber: #e0a34e; --red: #e5674b; --red-dim: #3a1f1a;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 6px; }
+
+  .app { display: grid; grid-template-columns: 224px 1fr; height: 100vh; }
+  .side { background: var(--bg-2); border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 18px 12px; }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 6px 10px 20px; }
+  .brand .mark { width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(135deg, #8b7cf6, #6d8df2); display: flex; align-items: center; justify-content: center; font-weight: 700; color: #0d0f13; font-family: 'Space Grotesk'; }
+  .brand .name { font-family: 'Space Grotesk'; font-weight: 700; font-size: 17px; }
+  .nav { display: flex; flex-direction: column; gap: 2px; }
+  .nav-item { display: flex; align-items: center; gap: 11px; padding: 9px 11px; border-radius: 8px; color: var(--muted); cursor: pointer; font-weight: 500; font-size: 13.5px; border: none; background: none; width: 100%; text-align: left; transition: background .12s, color .12s; }
+  .nav-item:hover { background: var(--bg-3); color: var(--text); }
+  .nav-item.active { background: var(--accent-dim); color: #d6d4ff; }
+  .nav-item .ic { width: 17px; height: 17px; flex-shrink: 0; opacity: .9; }
+  .side-foot { margin-top: auto; padding: 10px; border-top: 1px solid var(--line); }
+  .backend-mini label { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted-2); display: block; margin-bottom: 5px; }
+  .backend-mini input { width: 100%; background: var(--bg); border: 1px solid var(--line); color: var(--text); border-radius: 7px; padding: 7px 9px; font-family: 'JetBrains Mono'; font-size: 11px; }
+
+  .main { overflow-y: auto; }
+  .topbar { display: flex; align-items: center; justify-content: space-between; padding: 20px 32px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: rgba(13,15,19,.85); backdrop-filter: blur(8px); z-index: 10; }
+  .page-title { font-family: 'Space Grotesk'; font-weight: 600; font-size: 21px; margin: 0; }
+  .page-sub { color: var(--muted); font-size: 13px; margin: 2px 0 0; }
+  .content { padding: 28px 32px 60px; max-width: 1100px; }
+
+  .btn { font-family: 'Inter'; font-weight: 600; font-size: 13.5px; border: none; border-radius: 8px; padding: 9px 15px; cursor: pointer; transition: transform .05s, background .12s, border-color .12s; }
+  .btn:active { transform: translateY(1px); }
+  .btn-primary { background: var(--accent); color: #071018; }
+  .btn-primary:hover { background: #8f92f5; }
+  .btn-ghost { background: var(--bg-3); color: var(--text); border: 1px solid var(--line-2); }
+  .btn-ghost:hover { border-color: var(--muted-2); }
+  .btn-sm { padding: 6px 11px; font-size: 12.5px; }
+  .btn:disabled { opacity: .6; cursor: default; }
+
+  .panel { background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .thead, .trow { display: grid; align-items: center; }
+  .thead { padding: 12px 18px; border-bottom: 1px solid var(--line); font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted-2); font-weight: 600; }
+  .trow { padding: 15px 18px; border-bottom: 1px solid var(--line); }
+  .trow:last-child { border-bottom: none; }
+  .trow:hover { background: var(--bg-3); cursor: pointer; }
+  .badge { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 20px; }
+  .badge.draft { background: var(--bg-3); color: var(--muted); border: 1px solid var(--line-2); }
+  .badge.active { background: var(--green-dim); color: var(--green); }
+  .badge.pending { background: var(--bg-3); color: var(--muted); border: 1px solid var(--line-2); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .dot.ok { background: var(--green); }
+  .dot.bad { background: var(--red); }
+  .prov-badge { font-size: 11px; font-family: 'JetBrains Mono'; color: var(--muted); border: 1px solid var(--line-2); border-radius: 5px; padding: 2px 6px; }
+  .mono { font-family: 'JetBrains Mono'; }
+  .prog { height: 4px; background: var(--bg-3); border-radius: 3px; margin-top: 4px; overflow: hidden; width: 90px; }
+  .prog-fill { height: 100%; background: var(--accent); border-radius: 3px; }
+  .empty { padding: 56px 18px; text-align: center; color: var(--muted); }
+  .empty b { display: block; color: var(--text); font-family: 'Space Grotesk'; font-weight: 600; font-size: 16px; margin-bottom: 5px; }
+  .iconbtn { background: none; border: none; color: var(--muted-2); cursor: pointer; padding: 5px 8px; border-radius: 6px; font-size: 15px; }
+  .iconbtn:hover { background: var(--bg); color: var(--text); }
+
+  .field { margin-bottom: 15px; }
+  .field label { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 6px; }
+  .field input, .field select, .field textarea { width: 100%; background: var(--bg); border: 1px solid var(--line-2); color: var(--text); border-radius: 8px; padding: 10px 12px; font-size: 14px; font-family: 'Inter'; }
+  .field textarea { min-height: 150px; resize: vertical; line-height: 1.6; }
+  .field input:focus, .field textarea:focus, .field select:focus { outline: none; border-color: var(--accent); }
+
+  .msg { margin-top: 12px; padding: 10px 13px; border-radius: 8px; font-size: 13px; display: none; }
+  .msg.ok { background: var(--green-dim); color: var(--green); display: block; }
+  .msg.err { background: var(--red-dim); color: #f0a596; display: block; }
+  .msg.info { background: var(--accent-dim); color: #d6d4ff; display: block; }
+
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; padding: 20px; z-index: 100; }
+  .overlay.show { display: flex; }
+  .modal { background: var(--bg-2); border: 1px solid var(--line-2); border-radius: 14px; width: 100%; max-width: 460px; padding: 24px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+  .modal.wide { max-width: 720px; max-height: 86vh; display: flex; flex-direction: column; }
+  .modal h3 { font-family: 'Space Grotesk'; font-weight: 600; font-size: 19px; margin: 0 0 4px; }
+  .modal .lede { color: var(--muted); font-size: 13.5px; margin: 0 0 18px; }
+  .close-x { float: right; background: none; border: none; font-size: 22px; color: var(--muted); cursor: pointer; line-height: 1; }
+  .provider { display: flex; align-items: center; gap: 13px; padding: 13px 15px; border: 1px solid var(--line-2); border-radius: 10px; cursor: pointer; background: var(--bg); width: 100%; text-align: left; margin-bottom: 9px; transition: border-color .12s; }
+  .provider:hover:not(.disabled) { border-color: var(--accent); }
+  .provider.disabled { opacity: .5; cursor: not-allowed; }
+  .provider .glyph { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; flex-shrink: 0; }
+  .g-google { background: #1a2740; color: #7fa8f0; }
+  .g-ms { background: #16301f; color: #5fc98a; }
+  .g-smtp { background: #2a2620; color: #c9a878; }
+  .provider .pname { font-weight: 600; font-size: 14.5px; }
+  .provider .pdesc { font-size: 12px; color: var(--muted); }
+  .soon { margin-left: auto; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted-2); border: 1px solid var(--line-2); border-radius: 20px; padding: 3px 8px; }
+  .modal-actions { display: flex; gap: 10px; margin-top: 14px; }
+  .modal-actions .btn { flex: 1; }
+  .back-link { background: none; border: none; color: var(--muted); font-size: 13px; cursor: pointer; padding: 0; margin-bottom: 12px; }
+
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 24px; }
+  .tab { padding: 11px 16px; font-size: 14px; font-weight: 500; color: var(--muted); cursor: pointer; border: none; background: none; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .row-flex { display: flex; align-items: center; gap: 12px; }
+  .spacer { flex: 1; }
+  .hint { color: var(--muted-2); font-size: 12.5px; }
+  .step-card { background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px; padding: 18px; margin-bottom: 14px; }
+  .step-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .step-head h4 { font-family: 'Space Grotesk'; margin: 0; font-size: 15px; }
+  .delay-row { display: flex; align-items: center; gap: 10px; margin-top: 12px; color: var(--muted); font-size: 13px; }
+  .delay-row input { width: 70px; background: var(--bg); border: 1px solid var(--line-2); color: var(--text); border-radius: 7px; padding: 7px 9px; text-align: center; }
+  .checkbox-row { display: flex; align-items: center; gap: 10px; padding: 11px 14px; border: 1px solid var(--line); border-radius: 9px; margin-bottom: 8px; cursor: pointer; }
+  .checkbox-row:hover { background: var(--bg-3); }
+  .checkbox-row input { width: 17px; height: 17px; accent-color: var(--accent); }
+
+  /* column mapping */
+  .map-scroll { overflow-y: auto; flex: 1; margin: 0 -6px; padding: 0 6px; }
+  .map-row { display: grid; grid-template-columns: 1fr 200px 1fr; gap: 18px; align-items: start; padding: 16px 4px; border-bottom: 1px solid var(--line); }
+  .map-row:last-child { border-bottom: none; }
+  .map-col-name { font-weight: 600; font-size: 14.5px; padding-top: 8px; }
+  .map-row select { width: 100%; background: var(--bg); border: 1px solid var(--line-2); color: var(--text); border-radius: 8px; padding: 9px 11px; font-size: 13.5px; }
+  .map-row select.mapped { border-color: var(--accent); color: #d6d4ff; }
+  .map-samples { font-size: 13px; color: var(--muted); line-height: 1.7; overflow: hidden; }
+  .map-samples span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .map-head { display: grid; grid-template-columns: 1fr 200px 1fr; gap: 18px; padding: 8px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted-2); font-weight: 600; border-bottom: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand"><div class="mark">C</div><div class="name">Coldwave</div></div>
+    <nav class="nav">
+      <button class="nav-item active" data-page="inboxes" onclick="nav('inboxes')">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+        Inboxes
+      </button>
+      <button class="nav-item" data-page="campaigns" onclick="nav('campaigns')">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
+        Campaigns
+      </button>
+      <button class="nav-item" data-page="unibox" onclick="nav('unibox')">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        Unibox
+      </button>
+    </nav>
+    <div class="side-foot">
+      <div class="hint" style="padding:4px 10px">Coldwave · self-hosted</div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <h1 class="page-title" id="ptitle">Inboxes</h1>
+        <p class="page-sub" id="psub"></p>
+      </div>
+      <div id="topActions"></div>
+    </div>
+    <div class="content" id="content"></div>
+  </main>
+</div>
+
+<!-- ADD INBOX MODAL -->
+<div class="overlay" id="ovInbox">
+  <div class="modal">
+    <div id="picker">
+      <button class="close-x" onclick="closeInbox()">×</button>
+      <h3>Add an inbox</h3>
+      <p class="lede">Which kind of account do you want to connect?</p>
+      <button class="provider disabled" type="button"><div class="glyph g-google">G</div><div><div class="pname">Google Workspace</div><div class="pdesc">Gmail / Workspace via secure sign-in</div></div><span class="soon">Soon</span></button>
+      <button class="provider disabled" type="button"><div class="glyph g-ms">M</div><div><div class="pname">Microsoft 365</div><div class="pdesc">Outlook / 365 via secure sign-in</div></div><span class="soon">Soon</span></button>
+      <button class="provider" onclick="showSmtp()" type="button"><div class="glyph g-smtp">@</div><div><div class="pname">Private SMTP</div><div class="pdesc">Any provider with SMTP credentials</div></div></button>
+    </div>
+    <div id="smtpForm" style="display:none">
+      <button class="back-link" onclick="backPicker()" type="button">← Back</button>
+      <h3>Connect via SMTP</h3>
+      <p class="lede">Verified before saving. Nothing is stored if it fails.</p>
+      <div class="field"><label>Email (label)</label><input id="c_email" type="email" placeholder="you@gmail.com"></div>
+      <div class="field"><label>SMTP host</label><input id="c_host" type="text" value="smtp.gmail.com"></div>
+      <div class="field"><label>SMTP port</label><input id="c_port" type="number" value="587"></div>
+      <div class="field"><label>SMTP username</label><input id="c_user" type="text"></div>
+      <div class="field"><label>Password (App Password, no spaces)</label><input id="c_pass" type="password"></div>
+      <div id="c_msg" class="msg"></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeInbox()" type="button">Cancel</button>
+        <button class="btn btn-primary" id="c_btn" onclick="connectInbox()" type="button">Verify &amp; connect</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- NEW CAMPAIGN MODAL -->
+<div class="overlay" id="ovCamp">
+  <div class="modal">
+    <button class="close-x" onclick="closeCamp()">×</button>
+    <h3>New campaign</h3>
+    <p class="lede">Give it a name. You'll add leads and write the sequence next.</p>
+    <div class="field"><label>Campaign name</label><input id="camp_name" type="text" placeholder="e.g. Q3 Outreach"></div>
+    <div id="camp_msg" class="msg"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeCamp()" type="button">Cancel</button>
+      <button class="btn btn-primary" id="camp_btn" onclick="createCampaign()" type="button">Create campaign</button>
+    </div>
+  </div>
+</div>
+
+<!-- CSV COLUMN MAPPING MODAL -->
+<div class="overlay" id="ovMap">
+  <div class="modal wide">
+    <div>
+      <button class="close-x" onclick="closeMap()">×</button>
+      <h3>Map your columns</h3>
+      <p class="lede"><span id="mapCount"></span> rows found. Tell us what each column is — only Email is required.</p>
+      <div class="map-head"><div>Column name</div><div>Select type</div><div>Samples</div></div>
+    </div>
+    <div class="map-scroll" id="mapRows"></div>
+    <div id="mapMsg" class="msg"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeMap()" type="button">Cancel</button>
+      <button class="btn btn-primary" id="mapBtn" onclick="uploadMapped()" type="button">Import leads</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+function base(){ return ''; }  // same origin — frontend is served by the backend
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+async function api(path, opts){ const r = await fetch(base()+path, opts); return r.json(); }
+
+let state = { page: 'inboxes', campaignId: null, tab: 'leads' };
+
+function nav(page){
+  state.page = page; state.campaignId = null;
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.page===page));
+  render();
+}
+function setHead(t,s){ $('ptitle').textContent=t; $('psub').textContent=s; }
+
+async function render(){
+  if(state.campaignId){ return renderCampaignDetail(); }
+  if(state.page==='inboxes') return renderInboxes();
+  if(state.page==='campaigns') return renderCampaigns();
+  if(state.page==='unibox') return renderUnibox();
+}
+
+// ---------- INBOXES ----------
+async function renderInboxes(){
+  setHead('Inboxes','Connect sending accounts, then run campaigns from them.');
+  $('topActions').innerHTML = '<button class="btn btn-primary" onclick="openInbox()">+ Add inbox</button>';
+  const c = $('content');
+  c.innerHTML = '<div class="panel"><div class="empty">Loading…</div></div>';
+  try{
+    const d = await api('/inboxes');
+    if(!d.ok){ c.innerHTML='<div class="panel"><div class="empty">'+esc(d.error)+'</div></div>'; return; }
+    if(!d.inboxes.length){ c.innerHTML='<div class="panel"><div class="empty"><b>No inboxes yet</b>Add one to start sending.</div></div>'; return; }
+    let rows = d.inboxes.map(i=>{
+      const ok = i.status==='active';
+      return '<div class="trow" style="grid-template-columns:1fr 130px 140px 44px">'
+        +'<div class="row-flex"><span style="font-weight:500">'+esc(i.email)+'</span><span class="prov-badge">'+esc(i.provider)+'</span></div>'
+        +'<div class="mono" style="color:var(--muted)">'+(i.sent_today||0)+' of 30</div>'
+        +'<div class="row-flex"><span class="dot '+(ok?'ok':'bad')+'"></span><span style="color:'+(ok?'var(--green)':'var(--red)')+'">'+(ok?'Healthy':esc(i.status))+'</span></div>'
+        +'<button class="iconbtn" onclick="event.stopPropagation();delInbox('+i.id+')">🗑</button></div>';
+    }).join('');
+    c.innerHTML = '<div class="panel"><div class="thead" style="grid-template-columns:1fr 130px 140px 44px"><div>Email</div><div>Emails sent</div><div>Health</div><div></div></div>'+rows+'</div>';
+  }catch(e){ c.innerHTML='<div class="panel"><div class="empty">Could not reach backend: '+esc(e.message)+'</div></div>'; }
+}
+async function delInbox(id){ if(!confirm('Remove this inbox?'))return; const d=await api('/inboxes/'+id,{method:'DELETE'}); if(d.ok)renderInboxes(); else alert(d.error); }
+
+function openInbox(){ $('ovInbox').classList.add('show'); backPicker(); }
+function closeInbox(){ $('ovInbox').classList.remove('show'); }
+function showSmtp(){ $('picker').style.display='none'; $('smtpForm').style.display='block'; }
+function backPicker(){ $('picker').style.display='block'; $('smtpForm').style.display='none'; $('c_msg').className='msg'; }
+async function connectInbox(){
+  const btn=$('c_btn'); btn.disabled=true; btn.textContent='Verifying…';
+  try{
+    const d = await api('/inboxes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      email:$('c_email').value.trim(), smtp_host:$('c_host').value.trim(), smtp_port:$('c_port').value.trim(),
+      smtp_user:$('c_user').value.trim(), smtp_pass:$('c_pass').value.trim() })});
+    if(d.ok){ closeInbox(); renderInboxes(); } else { $('c_msg').className='msg err'; $('c_msg').textContent=d.error; }
+  }catch(e){ $('c_msg').className='msg err'; $('c_msg').textContent='Could not reach backend: '+e.message; }
+  btn.disabled=false; btn.textContent='Verify & connect';
+}
+
+// ---------- CAMPAIGNS ----------
+async function renderCampaigns(){
+  setHead('Campaigns','Create a campaign, add leads, write your sequence, pick inboxes.');
+  $('topActions').innerHTML = '<button class="btn btn-primary" onclick="openCamp()">+ New campaign</button>';
+  const c = $('content');
+  c.innerHTML = '<div class="panel"><div class="empty">Loading…</div></div>';
+  try{
+    const d = await api('/campaigns');
+    if(!d.ok){ c.innerHTML='<div class="panel"><div class="empty">'+esc(d.error)+'</div></div>'; return; }
+    if(!d.campaigns.length){ c.innerHTML='<div class="panel"><div class="empty"><b>No campaigns yet</b>Create your first campaign to get going.</div></div>'; return; }
+    let rows = d.campaigns.map(cp=>{
+      const leads = Number(cp.lead_count)||0, sent = Number(cp.sent_count)||0, replied = Number(cp.replied_count)||0;
+      const totalPlanned = leads * (Number(cp.step_count)||1);
+      const pct = totalPlanned ? Math.min(100, Math.round(sent/totalPlanned*100)) : 0;
+      const replyRate = sent ? (replied/sent*100).toFixed(2) : '0.00';
+      const active = cp.status==='active';
+      return '<div class="trow" style="grid-template-columns:1fr 100px 120px 80px 110px 80px 44px" onclick="openCampaign('+cp.id+')">'
+        +'<div style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(cp.name)+'</div>'
+        +'<div><span class="badge '+esc(cp.status)+'">'+esc(cp.status)+'</span></div>'
+        +'<div><div class="mono" style="font-size:13px">'+pct+'%</div><div class="prog"><div class="prog-fill" style="width:'+pct+'%"></div></div></div>'
+        +'<div class="mono" style="color:var(--muted)">'+sent+'</div>'
+        +'<div class="mono" style="color:var(--muted)">'+replied+' <span class="hint">· '+replyRate+'%</span></div>'
+        +'<button class="iconbtn" title="'+(active?'Pause':'Start')+'" onclick="event.stopPropagation();rowToggle('+cp.id+',\''+cp.status+'\')">'+(active?'⏸':'▶')+'</button>'
+        +'<button class="iconbtn" onclick="event.stopPropagation();delCampaign('+cp.id+')">🗑</button></div>';
+    }).join('');
+    c.innerHTML = '<div class="panel"><div class="thead" style="grid-template-columns:1fr 100px 120px 80px 110px 80px 44px"><div>Name</div><div>Status</div><div>Progress</div><div>Sent</div><div>Replied</div><div></div><div></div></div>'+rows+'</div>';
+  }catch(e){ c.innerHTML='<div class="panel"><div class="empty">Could not reach backend: '+esc(e.message)+'</div></div>'; }
+}
+async function rowToggle(id, status){
+  try{
+    const d = await api('/campaigns/'+id+'/'+(status==='active'?'pause':'start'), {method:'POST'});
+    if(!d.ok) alert(d.error);
+    renderCampaigns();
+  }catch(e){ alert('Could not reach backend: '+e.message); }
+}
+function openCamp(){ $('ovCamp').classList.add('show'); $('camp_msg').className='msg'; $('camp_name').value=''; }
+function closeCamp(){ $('ovCamp').classList.remove('show'); }
+async function createCampaign(){
+  const btn=$('camp_btn'); btn.disabled=true; btn.textContent='Creating…';
+  try{
+    const d = await api('/campaigns',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:$('camp_name').value})});
+    if(d.ok){ closeCamp(); openCampaign(d.campaign.id); } else { $('camp_msg').className='msg err'; $('camp_msg').textContent=d.error; }
+  }catch(e){ $('camp_msg').className='msg err'; $('camp_msg').textContent='Could not reach backend: '+e.message; }
+  btn.disabled=false; btn.textContent='Create campaign';
+}
+async function delCampaign(id){ if(!confirm('Delete this campaign and all its leads?'))return; const d=await api('/campaigns/'+id,{method:'DELETE'}); if(d.ok)renderCampaigns(); else alert(d.error); }
+
+// ---------- CAMPAIGN DETAIL ----------
+function openCampaign(id){ state.campaignId=id; state.tab='leads'; render(); }
+async function renderCampaignDetail(){
+  const c = $('content');
+  c.innerHTML = '<div class="empty">Loading…</div>';
+  let d;
+  try{ d = await api('/campaigns/'+state.campaignId); }
+  catch(e){ c.innerHTML='<div class="panel"><div class="empty">Could not reach backend: '+esc(e.message)+'</div></div>'; return; }
+  if(!d.ok){ c.innerHTML='<div class="panel"><div class="empty">'+esc(d.error)+'</div></div>'; return; }
+  window._camp = d;
+  const st = d.stats || {};
+  setHead(d.campaign.name, d.leadCount+' leads · '+(st.sent||0)+' sent · '+(st.queued||0)+' queued · '+d.campaign.status);
+  const isActive = d.campaign.status === 'active';
+  $('topActions').innerHTML =
+    '<div class="row-flex">'
+    + (isActive
+        ? '<button class="btn btn-ghost" id="goBtn" onclick="pauseCampaign()">⏸ Pause</button>'
+        : '<button class="btn btn-primary" id="goBtn" onclick="startCampaign()">▶ Start campaign</button>')
+    + '<button class="btn btn-ghost btn-sm" onclick="nav(\'campaigns\')">← All campaigns</button></div>';
+  const tabs = ['leads','sequence','schedule','options'];
+  c.innerHTML = '<div class="tabs">'+tabs.map(t=>'<button class="tab '+(state.tab===t?'active':'')+'" onclick="setTab(\''+t+'\')">'+t[0].toUpperCase()+t.slice(1)+'</button>').join('')+'</div><div id="tabBody"></div>';
+  renderTab();
+}
+function setTab(t){ state.tab=t; document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b.textContent.toLowerCase()===t)); renderTab(); }
+function renderTab(){
+  const b = $('tabBody'); const d = window._camp;
+  if(state.tab==='leads') return renderLeadsTab(b, d);
+  if(state.tab==='sequence') return renderSequenceTab(b, d);
+  if(state.tab==='schedule') return renderScheduleTab(b, d);
+  if(state.tab==='options') return renderOptionsTab(b, d);
+}
+
+// ---------- START / PAUSE ----------
+async function startCampaign(){
+  const btn = $('goBtn'); btn.disabled = true; btn.textContent = 'Starting…';
+  try{
+    const d = await api('/campaigns/'+state.campaignId+'/start', {method:'POST'});
+    if(d.ok){ renderCampaignDetail(); }
+    else { alert(d.error); btn.disabled=false; btn.textContent='▶ Start campaign'; }
+  }catch(e){ alert('Could not reach backend: '+e.message); btn.disabled=false; btn.textContent='▶ Start campaign'; }
+}
+async function pauseCampaign(){
+  const btn = $('goBtn'); btn.disabled = true;
+  try{
+    const d = await api('/campaigns/'+state.campaignId+'/pause', {method:'POST'});
+    if(d.ok) renderCampaignDetail(); else { alert(d.error); btn.disabled=false; }
+  }catch(e){ alert('Could not reach backend: '+e.message); btn.disabled=false; }
+}
+
+// ---------- LEADS TAB + CSV MAPPING ----------
+function renderLeadsTab(b, d){
+  let list = d.leads.length
+    ? '<div class="panel"><div class="thead" style="grid-template-columns:1fr 130px 130px 90px"><div>Email</div><div>First name</div><div>Company</div><div>Status</div></div>'
+      + d.leads.map(l=>'<div class="trow" style="grid-template-columns:1fr 130px 130px 90px;cursor:default"><div>'+esc(l.email)+'</div><div style="color:var(--muted)">'+esc(l.first_name)+'</div><div style="color:var(--muted)">'+esc(l.company)+'</div><div><span class="badge pending">'+esc(l.status)+'</span></div></div>').join('')
+      + (d.leadCount>d.leads.length ? '<div class="trow" style="cursor:default;color:var(--muted-2)">+ '+(d.leadCount-d.leads.length)+' more…</div>' : '')
+      + '</div>'
+    : '<div class="panel"><div class="empty"><b>No leads yet</b>Upload a CSV — you\'ll map the columns next.</div></div>';
+  b.innerHTML = '<div class="row-flex" style="margin-bottom:16px"><div class="hint">Upload any CSV. You\'ll choose which column is which on the next screen.</div><div class="spacer"></div><label class="btn btn-primary btn-sm" style="cursor:pointer">Upload CSV<input id="csvFile" type="file" accept=".csv,text/csv" style="display:none" onchange="handleCsv(event)"></label></div><div id="csvMsg" class="msg"></div>'+list;
+}
+
+const FIELD_OPTIONS = [
+  { v: '', label: 'Do not import' },
+  { v: 'email', label: 'Email' },
+  { v: 'first_name', label: 'First Name' },
+  { v: 'last_name', label: 'Last Name' },
+  { v: 'company', label: 'Company Name' },
+];
+function guessField(header){
+  const h = header.toLowerCase().replace(/[^a-z]/g,'');
+  if(h.includes('email')) return 'email';
+  if(h==='firstname'||h==='first') return 'first_name';
+  if(h==='lastname'||h==='last') return 'last_name';
+  if(h.includes('company')||h.includes('organization')) return 'company';
+  return '';
+}
+
+function handleCsv(ev){
+  const file = ev.target.files[0]; if(!file) return;
+  ev.target.value = ''; // allow re-selecting the same file
+  const reader = new FileReader();
+  reader.onload = () => {
+    try{
+      const { headers, rows } = parseCsv(reader.result);
+      if(!rows.length){ showCsv('err','No data rows found in the file.'); return; }
+      window._csv = { headers, rows };
+      openMap(headers, rows);
+    }catch(e){ showCsv('err','Could not parse file: '+e.message); }
+  };
+  reader.onerror = () => showCsv('err','Could not read the file.');
+  reader.readAsText(file);
+}
+function showCsv(cls,msg){ const el=$('csvMsg'); if(el){ el.className='msg '+cls; el.textContent=msg; } }
+
+// mapping modal
+function openMap(headers, rows){
+  $('mapCount').textContent = rows.length.toLocaleString();
+  const used = new Set();
+  $('mapRows').innerHTML = headers.map((h, idx)=>{
+    let guess = guessField(h);
+    if(guess && used.has(guess)) guess = '';   // only auto-assign each field once
+    if(guess) used.add(guess);
+    const samples = rows.slice(0,4).map(r=>'<span>'+esc(r[idx]||'—')+'</span>').join('');
+    const opts = FIELD_OPTIONS.map(o=>'<option value="'+o.v+'" '+(o.v===guess?'selected':'')+'>'+o.label+'</option>').join('');
+    return '<div class="map-row"><div class="map-col-name">'+esc(h||('Column '+(idx+1)))+'</div>'
+      +'<div><select data-col="'+idx+'" class="'+(guess?'mapped':'')+'" onchange="this.className=this.value?\'mapped\':\'\'">'+opts+'</select></div>'
+      +'<div class="map-samples">'+samples+'</div></div>';
+  }).join('');
+  $('mapMsg').className='msg';
+  $('ovMap').classList.add('show');
+}
+function closeMap(){ $('ovMap').classList.remove('show'); }
+
+async function uploadMapped(){
+  const btn=$('mapBtn');
+  const selects = [...document.querySelectorAll('#mapRows select')];
+  const mapping = {}; // field -> column index
+  for(const s of selects){
+    if(!s.value) continue;
+    if(mapping[s.value] !== undefined){ mapMsg('err','"'+FIELD_OPTIONS.find(o=>o.v===s.value).label+'" is selected for two columns. Pick it only once.'); return; }
+    mapping[s.value] = Number(s.dataset.col);
+  }
+  if(mapping.email === undefined){ mapMsg('err','You must map one column to Email.'); return; }
+
+  const { rows } = window._csv;
+  const leads = rows.map(r=>({
+    email: r[mapping.email] || '',
+    first_name: mapping.first_name !== undefined ? (r[mapping.first_name]||'') : '',
+    last_name: mapping.last_name !== undefined ? (r[mapping.last_name]||'') : '',
+    company: mapping.company !== undefined ? (r[mapping.company]||'') : '',
+  }));
+
+  // FIX: upload in chunks of 2000 with progress, so big lists never time out.
+  btn.disabled = true;
+  const CHUNK = 2000;
+  let inserted=0, skipped=0, invalid=0;
+  try{
+    for(let i=0; i<leads.length; i+=CHUNK){
+      const part = leads.slice(i, i+CHUNK);
+      mapMsg('info','Importing '+Math.min(i+CHUNK, leads.length).toLocaleString()+' of '+leads.length.toLocaleString()+'…');
+      const d = await api('/campaigns/'+state.campaignId+'/leads',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({leads:part})});
+      if(!d.ok){ mapMsg('err', d.error); btn.disabled=false; return; }
+      inserted += d.inserted; skipped += d.skipped; invalid += (d.invalid||0);
+    }
+    closeMap();
+    showCsv('ok','Imported '+inserted.toLocaleString()+' leads'+((skipped||invalid)?' · skipped '+(skipped+invalid).toLocaleString()+' (duplicates or invalid)':'')+'.');
+    renderCampaignDetail();
+  }catch(e){
+    mapMsg('err','Upload failed: '+e.message+' — nothing to worry about, already-imported rows are saved; just press Import again to continue.');
+  }
+  btn.disabled = false;
+}
+function mapMsg(cls,msg){ const el=$('mapMsg'); el.className='msg '+cls; el.textContent=msg; }
+
+// CSV parser (quotes, commas-in-quotes, CRLF)
+function parseCsv(text){
+  const lines = text.replace(/\r/g,'').split('\n').filter(l=>l.length && l.split(',').some(c=>c.trim()));
+  if(lines.length<2) return { headers: [], rows: [] };
+  const headers = splitCsvLine(lines[0]).map(h=>h.trim());
+  const rows = lines.slice(1).map(splitCsvLine);
+  return { headers, rows };
+}
+function splitCsvLine(line){
+  const out=[]; let cur=''; let q=false;
+  for(let i=0;i<line.length;i++){ const ch=line[i];
+    if(q){ if(ch==='"'&&line[i+1]==='"'){cur+='"';i++;} else if(ch==='"'){q=false;} else cur+=ch; }
+    else { if(ch==='"')q=true; else if(ch===','){out.push(cur);cur='';} else cur+=ch; }
+  }
+  out.push(cur); return out.map(c=>c.trim());
+}
+
+// ---------- SEQUENCE TAB ----------
+function renderSequenceTab(b, d){
+  window._steps = d.steps.length ? d.steps.map(s=>({subject:s.subject||'',body:s.body||'',delay_days:s.delay_days||0}))
+                                 : [{subject:'',body:'',delay_days:0}];
+  drawSteps(b);
+}
+function drawSteps(b){
+  const steps = window._steps;
+  let html = steps.map((s,idx)=>{
+    return '<div class="step-card">'
+      +'<div class="step-head"><h4>Step '+(idx+1)+'</h4>'+(steps.length>1?'<button class="iconbtn" onclick="removeStep('+idx+')">🗑</button>':'')+'</div>'
+      +'<div class="field"><label>Subject '+(idx>0?'(blank = same thread as previous)':'')+'</label><input type="text" value="'+esc(s.subject)+'" oninput="updStep('+idx+',\'subject\',this.value)" placeholder="Hey {{firstName}}, quick question"></div>'
+      +'<div class="field"><label>Body</label><textarea oninput="updStep('+idx+',\'body\',this.value)" placeholder="Hi {{firstName}},&#10;&#10;Use {{firstName}}, {{lastName}}, {{company}} as variables.">'+esc(s.body)+'</textarea></div>'
+      + (idx < steps.length-1 ? '<div class="delay-row">Then wait <input type="number" min="0" value="'+ (steps[idx+1].delay_days) +'" oninput="updStep('+(idx+1)+',\'delay_days\',this.value)"> days before the next step</div>' : '')
+      +'</div>';
+  }).join('');
+  html += '<div class="row-flex" style="margin-top:6px"><button class="btn btn-ghost btn-sm" onclick="addStep()">+ Add step</button><div class="spacer"></div><button class="btn btn-primary" id="seqSave" onclick="saveSteps()">Save sequence</button></div><div id="seqMsg" class="msg"></div>';
+  // test email panel
+  const leads = (window._camp.leads||[]).slice(0,50);
+  const leadOpts = '<option value="">Sample data (Alex / Acme Inc)</option>'
+    + leads.map(l=>'<option value="'+l.id+'">'+esc(l.email)+(l.first_name?' — '+esc(l.first_name):'')+'</option>').join('');
+  const stepOpts = steps.map((s,i)=>'<option value="'+(i+1)+'">Step '+(i+1)+'</option>').join('');
+  html += '<div class="step-card" style="margin-top:20px;border-color:var(--accent-dim)">'
+    +'<div class="step-head"><h4>✈ Send a test email</h4></div>'
+    +'<div class="hint" style="margin-bottom:12px">Sends the step with variables filled from a real lead, subject prefixed [TEST]. Save the sequence first.</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+    +'<div class="field"><label>Which step</label><select id="test_step">'+stepOpts+'</select></div>'
+    +'<div class="field"><label>Load data for lead</label><select id="test_lead">'+leadOpts+'</select></div>'
+    +'</div>'
+    +'<div class="field"><label>Send test to</label><input id="test_to" type="email" placeholder="you@example.com"></div>'
+    +'<div class="row-flex"><div class="spacer"></div><button class="btn btn-primary" id="testBtn" onclick="sendSeqTest()">Send test email</button></div>'
+    +'<div id="testMsg" class="msg"></div></div>';
+  b.innerHTML = html;
+}
+function updStep(i,k,v){ window._steps[i][k] = (k==='delay_days')? (Number(v)||0) : v; }
+function addStep(){ window._steps.push({subject:'',body:'',delay_days:3}); drawSteps($('tabBody')); }
+function removeStep(i){ window._steps.splice(i,1); drawSteps($('tabBody')); }
+async function saveSteps(){
+  const btn=$('seqSave'); btn.disabled=true; btn.textContent='Saving…';
+  try{
+    const d = await api('/campaigns/'+state.campaignId+'/steps',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({steps:window._steps})});
+    const m=$('seqMsg'); if(d.ok){ m.className='msg ok'; m.textContent='Sequence saved ('+d.count+' steps).'; } else { m.className='msg err'; m.textContent=d.error; }
+  }catch(e){ const m=$('seqMsg'); m.className='msg err'; m.textContent='Could not reach backend: '+e.message; }
+  btn.disabled=false; btn.textContent='Save sequence';
+}
+
+async function sendSeqTest(){
+  const btn=$('testBtn'); const to=$('test_to').value.trim();
+  const m=$('testMsg');
+  if(!to){ m.className='msg err'; m.textContent='Enter a recipient address.'; return; }
+  btn.disabled=true; btn.textContent='Sending…';
+  try{
+    const d = await api('/campaigns/'+state.campaignId+'/test-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      to, stepNumber: Number($('test_step').value)||1,
+      leadId: $('test_lead').value ? Number($('test_lead').value) : null,
+    })});
+    if(d.ok){ m.className='msg ok'; m.textContent='Test sent from '+d.from+' — subject: '+d.subject; }
+    else { m.className='msg err'; m.textContent=d.error; }
+  }catch(e){ m.className='msg err'; m.textContent='Could not reach backend: '+e.message; }
+  btn.disabled=false; btn.textContent='Send test email';
+}
+
+// ---------- SCHEDULE TAB ----------
+const TIMEZONES = ['UTC','America/New_York','America/Chicago','America/Denver','America/Los_Angeles','America/Anchorage','Pacific/Honolulu','America/Toronto','America/Sao_Paulo','Europe/London','Europe/Paris','Europe/Berlin','Europe/Madrid','Europe/Rome','Europe/Amsterdam','Europe/Stockholm','Europe/Moscow','Asia/Dubai','Asia/Karachi','Asia/Dhaka','Asia/Kolkata','Asia/Bangkok','Asia/Singapore','Asia/Hong_Kong','Asia/Shanghai','Asia/Tokyo','Asia/Seoul','Australia/Sydney','Australia/Perth','Pacific/Auckland'];
+const DAY_NAMES = {1:'Monday',2:'Tuesday',3:'Wednesday',4:'Thursday',5:'Friday',6:'Saturday',7:'Sunday'};
+function hourLabel(h){ if(h===0)return '12:00 AM'; if(h<12)return h+':00 AM'; if(h===12)return '12:00 PM'; if(h===24)return 'Midnight'; return (h-12)+':00 PM'; }
+
+function renderScheduleTab(b, d){
+  const c = d.campaign;
+  const days = new Set(c.send_days || [1,2,3,4,5]);
+  const tzOpts = TIMEZONES.map(t=>'<option value="'+t+'" '+(t===c.timezone?'selected':'')+'>'+t.replace(/_/g,' ')+'</option>').join('');
+  const fromOpts = Array.from({length:24},(_,h)=>'<option value="'+h+'" '+(h===c.send_window_start?'selected':'')+'>'+hourLabel(h)+'</option>').join('');
+  const toOpts = Array.from({length:24},(_,i)=>{const h=i+1; return '<option value="'+h+'" '+(h===c.send_window_end?'selected':'')+'>'+hourLabel(h)+'</option>';}).join('');
+  const dayBoxes = [1,2,3,4,5,6,7].map(dn=>
+    '<label class="checkbox-row" style="display:inline-flex;margin-right:8px;width:auto"><input type="checkbox" data-day="'+dn+'" '+(days.has(dn)?'checked':'')+'><span>'+DAY_NAMES[dn]+'</span></label>'
+  ).join('');
+  b.innerHTML =
+    '<div style="max-width:640px">'
+    +'<div class="step-card"><div class="step-head"><h4>Timing</h4></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">'
+    +'<div class="field"><label>Send from</label><select id="sch_from">'+fromOpts+'</select></div>'
+    +'<div class="field"><label>Until</label><select id="sch_to">'+toOpts+'</select></div>'
+    +'</div>'
+    +'<div class="field"><label>Timezone</label><select id="sch_tz">'+tzOpts+'</select></div>'
+    +'<div class="hint">Emails only go out between these hours in this timezone.</div></div>'
+    +'<div class="step-card"><div class="step-head"><h4>Days</h4></div><div>'+dayBoxes+'</div></div>'
+    +'<div class="row-flex"><button class="btn btn-primary" id="schSave" onclick="saveSchedule()">Save schedule</button></div>'
+    +'<div id="schMsg" class="msg"></div></div>';
+}
+async function saveSchedule(){
+  const btn=$('schSave'); btn.disabled=true; btn.textContent='Saving…';
+  const send_days = [...document.querySelectorAll('#tabBody input[data-day]')].filter(i=>i.checked).map(i=>Number(i.dataset.day));
+  const c = window._camp.campaign;
+  try{
+    const d = await api('/campaigns/'+state.campaignId+'/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      timezone: $('sch_tz').value,
+      send_window_start: Number($('sch_from').value),
+      send_window_end: Number($('sch_to').value),
+      send_days,
+      daily_limit: c.daily_limit,
+      stop_on_reply: c.stop_on_reply,
+    })});
+    const m=$('schMsg');
+    if(d.ok){ window._camp.campaign = d.campaign; m.className='msg ok'; m.textContent='Schedule saved.'; }
+    else { m.className='msg err'; m.textContent=d.error; }
+  }catch(e){ const m=$('schMsg'); m.className='msg err'; m.textContent='Could not reach backend: '+e.message; }
+  btn.disabled=false; btn.textContent='Save schedule';
+}
+
+// ---------- OPTIONS TAB ----------
+async function renderOptionsTab(b, d){
+  b.innerHTML='<div class="empty">Loading inboxes…</div>';
+  const inb = await api('/inboxes');
+  if(!inb.ok){ b.innerHTML='<div class="panel"><div class="empty">'+esc(inb.error)+'</div></div>'; return; }
+  const selected = new Set(d.selectedAccountIds);
+  if(!inb.inboxes.length){ b.innerHTML='<div class="panel"><div class="empty"><b>No inboxes to choose</b>Connect an inbox first.</div></div>'; return; }
+  let rows = inb.inboxes.map(i=>{
+    const on = selected.has(i.id);
+    return '<label class="checkbox-row"><input type="checkbox" '+(on?'checked':'')+' onchange="toggleAcct('+i.id+',this.checked)"><span style="font-weight:500">'+esc(i.email)+'</span><span class="prov-badge">'+esc(i.provider)+'</span></label>';
+  }).join('');
+  window._selAccts = selected;
+  const c = d.campaign;
+  b.innerHTML =
+    '<div style="max-width:640px">'
+    +'<div class="step-card"><div class="step-head"><h4>Accounts to send from</h4></div>'
+    +'<div class="hint" style="margin-bottom:12px">Emails rotate across the inboxes you pick here.</div>'+rows
+    +'</div>'
+    +'<div class="step-card"><div class="step-head"><h4>Sending options</h4></div>'
+    +'<label class="checkbox-row"><input type="checkbox" id="opt_stop" '+(c.stop_on_reply?'checked':'')+'><span style="font-weight:500">Stop sending on reply</span><span class="hint" style="margin-left:8px">stop a lead\'s sequence once they respond (activates with Unibox)</span></label>'
+    +'<div class="field" style="margin-top:12px"><label>Daily limit (emails per day for this campaign)</label><input type="number" id="opt_limit" min="1" max="2000" value="'+(c.daily_limit||30)+'" style="max-width:140px"></div>'
+    +'</div>'
+    +'<div class="row-flex"><button class="btn btn-primary" id="acctSave" onclick="saveOptions()">Save options</button></div>'
+    +'<div id="acctMsg" class="msg"></div></div>';
+}
+async function saveOptions(){
+  const btn=$('acctSave'); btn.disabled=true; btn.textContent='Saving…';
+  const c = window._camp.campaign;
+  try{
+    const d1 = await api('/campaigns/'+state.campaignId+'/accounts',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({accountIds:[...window._selAccts]})});
+    const d2 = await api('/campaigns/'+state.campaignId+'/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      timezone: c.timezone, send_window_start: c.send_window_start, send_window_end: c.send_window_end,
+      send_days: c.send_days, daily_limit: Number($('opt_limit').value)||30, stop_on_reply: $('opt_stop').checked,
+    })});
+    const m=$('acctMsg');
+    if(d1.ok && d2.ok){ window._camp.campaign = d2.campaign; m.className='msg ok'; m.textContent='Options saved ('+d1.count+' inbox(es)).'; }
+    else { m.className='msg err'; m.textContent=(d1.error||d2.error); }
+  }catch(e){ const m=$('acctMsg'); m.className='msg err'; m.textContent='Could not reach backend: '+e.message; }
+  btn.disabled=false; btn.textContent='Save options';
+}
+
+function toggleAcct(id,on){ if(on)window._selAccts.add(id); else window._selAccts.delete(id); }
+
+// ---------- UNIBOX ----------
+let uniboxCat = 'primary';
+async function renderUnibox(){
+  setHead('Unibox','All your replies in one place.');
+  $('topActions').innerHTML='<button class="btn btn-ghost btn-sm" onclick="renderUnibox()">Refresh</button>';
+  const c = $('content');
+  c.innerHTML =
+    '<div class="tabs"><button class="tab '+(uniboxCat==='primary'?'active':'')+'" onclick="uniboxCat=\'primary\';renderUnibox()">Primary</button>'
+    +'<button class="tab '+(uniboxCat==='other'?'active':'')+'" onclick="uniboxCat=\'other\';renderUnibox()">Others</button></div>'
+    +'<div class="field" style="max-width:420px;margin-bottom:14px"><input id="uniSearch" type="text" placeholder="Search mail…" oninput="filterUnibox()"></div>'
+    +'<div id="uniboxBody"><div class="empty">Loading…</div></div>';
+  try{
+    const d = await api('/unibox?category='+uniboxCat);
+    const b = $('uniboxBody');
+    if(!d.ok){ b.innerHTML='<div class="panel"><div class="empty">'+esc(d.error)+'</div></div>'; return; }
+    if(!d.messages.length){
+      b.innerHTML='<div class="panel"><div class="empty"><b>'+(uniboxCat==='primary'?'No campaign replies yet':'Nothing here yet')+'</b>'
+        +(uniboxCat==='primary'?'Replies to your campaign emails will appear here.':'Other mail arriving in your connected inboxes lands here.')+'</div></div>';
+      return;
+    }
+    window._uniMsgs = d.messages;
+    b.innerHTML = '<div class="panel">'+d.messages.map(m=>{
+      const snippet = (m.body||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim().slice(0,110);
+      const when = new Date(m.created_at).toLocaleDateString(undefined,{month:'short',day:'numeric'});
+      return '<div class="trow" style="grid-template-columns:220px 1fr 120px 70px" onclick="openThread('+m.id+')">'
+        +'<div style="overflow:hidden"><div style="font-weight:'+(m.is_read?'450':'600')+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(m.from_name||m.from_email)+'</div>'
+        +'<div class="hint" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(m.from_email)+'</div></div>'
+        +'<div style="overflow:hidden"><div style="font-weight:'+(m.is_read?'450':'600')+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(m.subject||'(no subject)')+'</div>'
+        +'<div class="hint" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(snippet)+'</div></div>'
+        +'<div class="hint" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(m.campaign_name||'—')+'</div>'
+        +'<div class="hint">'+when+'</div></div>';
+    }).join('')+'</div>';
+  }catch(e){ $('uniboxBody').innerHTML='<div class="panel"><div class="empty">Could not reach backend: '+esc(e.message)+'</div></div>'; }
+}
+
+function filterUnibox(){
+  const q = ($('uniSearch').value||'').toLowerCase();
+  const rows = document.querySelectorAll('#uniboxBody .trow');
+  (window._uniMsgs||[]).forEach((m,i)=>{
+    const hay = (m.from_email+' '+(m.from_name||'')+' '+(m.subject||'')+' '+(m.body||'')).toLowerCase();
+    if(rows[i]) rows[i].style.display = hay.includes(q) ? '' : 'none';
+  });
+}
+async function openThread(id){
+  const c = $('content');
+  c.innerHTML='<div class="empty">Loading thread…</div>';
+  $('topActions').innerHTML='<button class="btn btn-ghost btn-sm" onclick="renderUnibox()">← Back to Unibox</button>';
+  try{
+    const d = await api('/unibox/thread/'+id);
+    if(!d.ok){ c.innerHTML='<div class="panel"><div class="empty">'+esc(d.error)+'</div></div>'; return; }
+    const last = d.thread[d.thread.length-1];
+    setHead(esc(last.subject||'(no subject)'),'Conversation · replying goes out from the inbox that received it');
+    window._replyToId = id;
+    c.innerHTML = d.thread.map(m=>{
+      const out = m.direction==='outbound';
+      return '<div class="step-card" style="'+(out?'border-color:var(--accent-dim);':'')+'margin-bottom:10px">'
+        +'<div class="row-flex" style="margin-bottom:8px"><span style="font-weight:600">'+esc(out?('You ('+(m.from_email||'')+')'):(m.from_name||m.from_email))+'</span>'
+        +'<span class="hint">'+new Date(m.created_at).toLocaleString()+'</span>'
+        +(out?'<span class="prov-badge">sent</span>':'')+'</div>'
+        +'<div style="font-size:14px;line-height:1.6;overflow-wrap:break-word">'+(m.body||'')+'</div></div>';
+    }).join('')
+    +'<div class="step-card"><div class="step-head"><h4>Reply</h4></div>'
+    +'<div class="field"><textarea id="replyBody" placeholder="Write your reply…"></textarea></div>'
+    +'<div class="row-flex"><div class="spacer"></div><button class="btn btn-primary" id="replyBtn" onclick="sendReply()">Send reply</button></div>'
+    +'<div id="replyMsg" class="msg"></div></div>';
+  }catch(e){ c.innerHTML='<div class="panel"><div class="empty">Could not reach backend: '+esc(e.message)+'</div></div>'; }
+}
+
+async function sendReply(){
+  const btn=$('replyBtn'); const body=$('replyBody').value.trim();
+  if(!body){ const m=$('replyMsg'); m.className='msg err'; m.textContent='Write something first.'; return; }
+  btn.disabled=true; btn.textContent='Sending…';
+  try{
+    const d = await api('/unibox/reply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messageId:window._replyToId, body})});
+    const m=$('replyMsg');
+    if(d.ok){ openThread(window._replyToId); }
+    else { m.className='msg err'; m.textContent=d.error; btn.disabled=false; btn.textContent='Send reply'; }
+  }catch(e){ const m=$('replyMsg'); m.className='msg err'; m.textContent='Could not reach backend: '+e.message; btn.disabled=false; btn.textContent='Send reply'; }
+}
+
+['ovInbox','ovCamp','ovMap'].forEach(id=>{ $(id).addEventListener('click',e=>{ if(e.target===$(id)) $(id).classList.remove('show'); }); });
+render();
+</script>
+</body>
+</html>
