@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Coldwave Outreach Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="icon-rail">
+      <button class="brand-mark" aria-label="Home">⚡</button>
+      <nav class="rail-nav" aria-label="Primary">
+        <button data-view="unibox" class="rail-btn" title="Unibox">✦</button>
+        <button data-view="campaigns" class="rail-btn active" title="Campaigns">➤</button>
+        <button data-view="accounts" class="rail-btn" title="Email Accounts">✉</button>
+      </nav>
+      <div class="rail-bottom">
+        <div class="avatar">C</div>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <div>
+          <h1 id="page-title">Campaigns</h1>
+          <p id="page-subtitle">Create, monitor and optimize cold email campaigns.</p>
+        </div>
+        <div class="top-actions" id="top-actions"></div>
+      </header>
+
+      <!-- UNIBOX -->
+      <section id="unibox-view" class="view">
+        <div class="unibox-layout">
+          <aside class="filters-panel">
+            <div class="panel-title-row"><h2>Filters</h2></div>
+            <button class="status-item active" data-ufilter="all"><span class="status-icon">ϟ</span>All mail</button>
+            <button class="status-item" data-ufilter="unread"><span class="status-icon green">ϟ</span>Unread</button>
+            <h3>All Campaigns</h3>
+            <div id="filter-campaigns"></div>
+            <h3>All Inboxes</h3>
+            <div id="filter-inboxes"></div>
+          </aside>
+
+          <section class="message-list-panel">
+            <div class="tabs">
+              <button class="tab active" data-cat="primary">Primary</button>
+              <button class="tab" data-cat="other">Others</button>
+            </div>
+            <label class="search-box wide"><span>⌕</span><input id="uni-search" placeholder="Search mail" /></label>
+            <div id="message-list" class="message-list"></div>
+          </section>
+
+          <section class="message-detail empty-state" id="message-detail">
+            <div class="qr-card">⚡</div>
+            <h2>Your replies, one inbox.</h2>
+            <p>Select a message to read the conversation and reply.</p>
+          </section>
+        </div>
+      </section>
+
+      <!-- CAMPAIGNS LIST -->
+      <section id="campaigns-view" class="view active-view">
+        <div class="content-toolbar">
+          <label class="search-box"><span>⌕</span><input id="campaign-search" placeholder="Search campaigns…" /></label>
+          <div class="toolbar-right">
+            <select id="campaign-status-filter"><option value="">All statuses</option><option value="active">Active</option><option value="paused">Paused</option><option value="draft">Draft</option></select>
+            <button class="primary-btn" id="add-campaign">＋ Add New</button>
+          </div>
+        </div>
+        <div class="table-head campaign-grid">
+          <span></span><span>Name</span><span>Status</span><span>Progress</span><span>Sent</span><span>Replied</span><span></span><span></span>
+        </div>
+        <div id="campaign-list" class="card-list"></div>
+      </section>
+
+      <!-- CAMPAIGN DETAIL -->
+      <section id="campaign-detail-view" class="view">
+        <div class="detail-wrap">
+          <div class="tabs2">
+            <button class="tab2 active" data-ctab="analytics">Analytics</button>
+            <button class="tab2" data-ctab="leads">Leads</button>
+            <button class="tab2" data-ctab="sequence">Sequence</button>
+            <button class="tab2" data-ctab="schedule">Schedule</button>
+            <button class="tab2" data-ctab="options">Options</button>
+          </div>
+          <div id="ctab-body"></div>
+        </div>
+      </section>
+
+      <!-- ACCOUNTS -->
+      <section id="accounts-view" class="view">
+        <div class="content-toolbar">
+          <label class="search-box"><span>⌕</span><input id="account-search" placeholder="Search accounts…" /></label>
+          <div class="toolbar-right">
+            <button class="primary-btn" id="add-account">＋ Add New</button>
+          </div>
+        </div>
+        <div class="table-head account-grid">
+          <span></span><span>Email</span><span>Emails sent today</span><span>Provider</span><span>Health</span><span></span>
+        </div>
+        <div id="account-list" class="card-list"></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ADD INBOX: provider picker + SMTP form -->
+  <div class="modal-backdrop" id="inbox-modal">
+    <div class="modal">
+      <button class="modal-close" data-close="inbox-modal">×</button>
+      <div id="provider-step">
+        <h2>Add an inbox</h2>
+        <p>Which kind of account do you want to connect?</p>
+        <button class="provider-row disabled" type="button"><span class="pglyph g">G</span><span><b>Google Workspace</b><small>Gmail / Workspace via secure sign-in</small></span><em>Soon</em></button>
+        <button class="provider-row disabled" type="button"><span class="pglyph m">M</span><span><b>Microsoft 365</b><small>Outlook / 365 via secure sign-in</small></span><em>Soon</em></button>
+        <button class="provider-row" id="pick-smtp" type="button"><span class="pglyph s">@</span><span><b>Private SMTP</b><small>Any provider with SMTP credentials</small></span></button>
+      </div>
+      <form id="smtp-step" style="display:none">
+        <button class="linkish" type="button" id="back-provider">← Back</button>
+        <h2>Connect via SMTP</h2>
+        <p>Verified before saving — nothing is stored if it fails.</p>
+        <label>Email<input id="in-email" type="email" required placeholder="you@domain.com"></label>
+        <label>SMTP host<input id="in-host" required value="smtp.gmail.com"></label>
+        <label>SMTP port<input id="in-port" type="number" required value="587"></label>
+        <label>SMTP username<input id="in-user" required placeholder="usually your full email"></label>
+        <label>Password (App Password, no spaces)<input id="in-pass" type="password" required></label>
+        <div class="mini-msg" id="inbox-msg"></div>
+        <div class="modal-actions"><button type="button" class="secondary-btn" data-close="inbox-modal">Cancel</button><button class="primary-btn" id="inbox-save">Verify &amp; connect</button></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- NEW CAMPAIGN -->
+  <div class="modal-backdrop" id="campaign-modal">
+    <div class="modal">
+      <button class="modal-close" data-close="campaign-modal">×</button>
+      <h2>New campaign</h2>
+      <p>Name it — you'll add leads and write the sequence next.</p>
+      <form id="campaign-form">
+        <label>Campaign name<input id="camp-name" required placeholder="e.g. Q3 Outreach"></label>
+        <div class="mini-msg" id="camp-msg"></div>
+        <div class="modal-actions"><button type="button" class="secondary-btn" data-close="campaign-modal">Cancel</button><button class="primary-btn">Create</button></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- CSV COLUMN MAPPING -->
+  <div class="modal-backdrop" id="map-modal">
+    <div class="modal modal-wide">
+      <button class="modal-close" data-close="map-modal">×</button>
+      <h2>Map your columns</h2>
+      <p><span id="map-count"></span> rows found. Only Email is required.</p>
+      <div class="map-head-row"><span>Column name</span><span>Select type</span><span>Samples</span></div>
+      <div id="map-rows" class="map-scroll"></div>
+      <div class="mini-msg" id="map-msg"></div>
+      <div class="modal-actions"><button type="button" class="secondary-btn" data-close="map-modal">Cancel</button><button class="primary-btn" id="map-import">Import leads</button></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
