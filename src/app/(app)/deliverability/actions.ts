@@ -7,6 +7,7 @@ import { verifyCname } from "@/lib/dns";
 import { requireWorkspace } from "@/server/workspace";
 import { refreshDomainHealth } from "@/server/services/domain-health";
 import { domainOf } from "@/lib/utils";
+import { startPlacementTest } from "@/server/deliverability/placement";
 
 export async function addTrackingDomain(formData: FormData) {
   const { workspace } = await requireWorkspace("ADMIN");
@@ -61,4 +62,11 @@ export async function recheckAllDomains() {
   }
   revalidatePath("/deliverability");
   revalidatePath("/accounts");
+}
+
+export async function runPlacementTest(formData: FormData) {
+  const { workspace } = await requireWorkspace("ADMIN");
+  const accountId = z.string().uuid().parse(formData.get("emailAccountId"));
+  await startPlacementTest(workspace.id, accountId);
+  revalidatePath("/deliverability");
 }

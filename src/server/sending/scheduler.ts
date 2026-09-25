@@ -52,8 +52,37 @@ interface AccountState {
   remaining: number;
 }
 
+/**
+ * Self-healing: releases leads stuck "in flight" — e.g. the process died between
+ * claiming a lead and queueing its job, or Redis lost the job.
+ */
+export async function reapStuck(now = new Date()) {
+  const staleQueued = new Date(now.getTime() - 2 * 3600_000);
+  const lost = await db.emailLog.findMany({
+    where: { status: "QUEUED", createdAt: { lt: staleQueued } },
+    select: { id: true, campaignId: true, leadId: true },
+    take: 500,
+  });
+  if (lost.length) {
+    const q = getQueue(QUEUES.sendEmail);
+    for (const l of lost) {
+      const job = await q.getJob(l.id);
+      const state = job ? await job.getState() : "missing";
+      if (state === "active" || state === "waiting" || state === "delayed") continue;
+      await db.emailLog.update({ where: { id: l.id }, data: { status: "FAILED", errorMessage: `Job ${state}; released by reaper` } });
+      await db.campaignLead.updateMany({ where: { campaignId: l.campaignId, leadId: l.leadId, status: "ACTIVE", nextSendAt: null }, data: { nextSendAt: now } });
+    }
+  }
+  const released = await db.$executeRaw`
+    UPDATE "CampaignLead" cl SET "nextSendAt" = ${now}
+    WHERE cl.status = 'ACTIVE' AND cl."nextSendAt" IS NULL AND cl."updatedAt" < ${new Date(now.getTime() - 15 * 60_000)}
+      AND NOT EXISTS (SELECT 1 FROM "EmailLog" l WHERE l."campaignId" = cl."campaignId" AND l."leadId" = cl."leadId" AND l.status = 'QUEUED')`;
+  return { lost: lost.length, released };
+}
+
 /** One pass over all active campaigns. Returns the number of emails queued. */
 export async function runSchedulerTick(now = new Date()): Promise<{ queued: number; completed: number }> {
+  if (now.getUTCMinutes() % 10 === 0) await reapStuck(now).catch((e) => console.error("reaper failed", e));
   const r = await redis();
   const dayStart = startOfUtcDay(now);
   const campaigns = await db.campaign.findMany({

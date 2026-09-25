@@ -9,18 +9,24 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { DnsBadge } from "@/components/dns-badge";
-import { addTrackingDomain, deleteTrackingDomain, recheckAllDomains, verifyTrackingDomain } from "./actions";
+import { Select } from "@/components/ui/select";
+import { placementSeeds, type PlacementResult } from "@/server/deliverability/placement";
+import { addTrackingDomain, deleteTrackingDomain, recheckAllDomains, runPlacementTest, verifyTrackingDomain } from "./actions";
 
 export default async function DeliverabilityPage() {
   const { workspace } = await requireWorkspace();
-  const [health, trackingDomains] = await Promise.all([
+  const [health, trackingDomains, accounts, tests] = await Promise.all([
     db.domainHealth.findMany({
       where: { emailAccount: { workspaceId: workspace.id } },
       include: { emailAccount: { select: { emailAddress: true } } },
       orderBy: { domain: "asc" },
     }),
     db.trackingDomain.findMany({ where: { workspaceId: workspace.id }, orderBy: { createdAt: "asc" } }),
+    db.emailAccount.findMany({ where: { workspaceId: workspace.id, status: "ACTIVE" }, select: { id: true, emailAddress: true }, orderBy: { emailAddress: "asc" } }),
+    db.placementTest.findMany({ where: { workspaceId: workspace.id }, orderBy: { createdAt: "desc" }, take: 10 }),
   ]);
+  const accountNames = new Map(accounts.map((a) => [a.id, a.emailAddress]));
+  const seedCount = placementSeeds().length;
 
   const domains = new Map<string, { h: (typeof health)[number]; inboxes: number }>();
   for (const h of health) {
@@ -70,6 +76,54 @@ export default async function DeliverabilityPage() {
               )}
             </TBody>
           </Table>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Inbox placement tests</CardTitle>
+            <CardDescription>
+              Sends a test email to {seedCount || "no"} seed inboxes across providers and reports whether it landed in the inbox or spam.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            {seedCount ? (
+              <form action={runPlacementTest} className="flex max-w-lg gap-2">
+                <Select name="emailAccountId" required>
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>{a.emailAddress}</option>
+                  ))}
+                </Select>
+                <Button type="submit" disabled={!accounts.length}>Run test</Button>
+              </form>
+            ) : (
+              <p className="text-sm text-muted-foreground">Configure seed inboxes with the PLACEMENT_SEEDS environment variable to enable placement tests.</p>
+            )}
+            {tests.map((t) => {
+              const results = (t.results as PlacementResult[] | null) ?? [];
+              return (
+                <div key={t.id} className="rounded-lg border p-3 text-sm">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="font-medium">{accountNames.get(t.emailAccountId) ?? "removed inbox"}</span>
+                    <span className="text-xs text-muted-foreground">{formatDistanceToNow(t.createdAt)} ago</span>
+                    {t.status === "COMPLETED" ? (
+                      <Badge variant={(t.inboxRate ?? 0) >= 80 ? "success" : (t.inboxRate ?? 0) >= 50 ? "warning" : "danger"}>{t.inboxRate}% inbox</Badge>
+                    ) : (
+                      <Badge variant="muted">{t.status.toLowerCase()}…</Badge>
+                    )}
+                  </div>
+                  {results.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {results.map((r) => (
+                        <Badge key={r.seed} variant={r.folder === "INBOX" ? "success" : r.folder === "SPAM" ? "danger" : "muted"}>
+                          {r.provider}: {r.folder.toLowerCase()}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </CardContent>
         </Card>
 
         <Card>

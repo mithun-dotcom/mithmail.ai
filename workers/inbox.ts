@@ -1,8 +1,9 @@
 import { Worker } from "bullmq";
 import { db } from "@/lib/db";
-import { getQueue, QUEUES, redisConnection, type FetchRepliesJob, type WarmupJob } from "@/server/queue";
+import { getQueue, QUEUES, redisConnection, type FetchRepliesJob, type PlacementJob, type WarmupJob } from "@/server/queue";
 import { syncInbox } from "@/server/inbox/imap-sync";
 import { planWarmup, sendWarmupEmail, sendWarmupReply } from "@/server/warmup/engine";
+import { checkPlacementTest } from "@/server/deliverability/placement";
 import { logger } from "./logger";
 
 /** Fans out one fetch job per IMAP-capable inbox. jobId de-duplicates overlapping runs. */
@@ -51,4 +52,11 @@ export function startWarmupWorker() {
     },
     { connection: redisConnection(), concurrency: 5 },
   );
+}
+
+export function startPlacementWorker() {
+  return new Worker<PlacementJob>(QUEUES.placement, (job) => checkPlacementTest(job.data.testId, job.data.attempt), {
+    connection: redisConnection(),
+    concurrency: 2,
+  });
 }

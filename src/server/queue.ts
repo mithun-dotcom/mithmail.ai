@@ -9,6 +9,7 @@ export const QUEUES = {
   dnsCheck: "dns-check",
   scheduler: "campaign-scheduler",
   webhooks: "webhooks",
+  placement: "placement-test",
 } as const;
 
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];
@@ -59,6 +60,11 @@ export interface WarmupJob {
   senderAccountId: string;
   recipientAccountId?: string;
   warmupLogId?: string;
+}
+export interface PlacementJob {
+  kind: "check";
+  testId: string;
+  attempt: number;
 }
 export interface WebhookJob {
   webhookId: string;
