@@ -83,7 +83,7 @@ OAuth redirect URIs to register:
 
 ## Deployment
 
-* **Web:** deploy the Next.js app (Vercel, or the `Dockerfile`). Tracking routes (`/t/*`) must be reachable at every custom tracking domain.
+* **Web:** deploy the Next.js app (Vercel, or the `Dockerfile`). Tracking routes (`/t/*`) must be reachable at every custom tracking domain, over HTTPS. Terminate TLS for customer CNAMEs at the edge, for example Vercel domains, Cloudflare for SaaS, or Caddy on-demand TLS.
 * **Workers:** run `npm run worker` on a long-lived host (Fly.io, Railway, ECS, a VM). They are stateless; scale horizontally, and split queues with `WORKERS=`. Run **exactly one** process that includes `scheduler`.
 * **Redis:** set `maxmemory-policy noeviction` (BullMQ requirement).
 * Run `npx prisma migrate deploy` on release.

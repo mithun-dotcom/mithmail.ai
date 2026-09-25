@@ -6,6 +6,8 @@ import { htmlToText } from "@/lib/template";
 import { cn } from "@/lib/utils";
 import { requireWorkspace } from "@/server/workspace";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { stripQuoted } from "@/server/inbox/reply-processor";
@@ -22,7 +24,7 @@ const FILTERS: { key: string; label: string; labels?: ThreadSummaryStatus[] }[] 
   { key: "other", label: "Other", labels: ["WRONG_PERSON", "UNSUBSCRIBE_REQUEST", "NEUTRAL"] },
 ];
 
-export default async function UniboxPage({ searchParams }: { searchParams: Promise<{ f?: string; q?: string; t?: string }> }) {
+export default async function UniboxPage({ searchParams }: { searchParams: Promise<{ f?: string; q?: string; t?: string; c?: string; a?: string }> }) {
   const { workspace } = await requireWorkspace();
   const sp = await searchParams;
   const filter = FILTERS.find((f) => f.key === sp.f) ?? FILTERS[0];
@@ -31,8 +33,10 @@ export default async function UniboxPage({ searchParams }: { searchParams: Promi
   if (filter.key === "unread") where.isRead = false;
   if (filter.labels) where.summaryStatus = { in: filter.labels };
   if (sp.q) where.OR = [{ leadEmail: { contains: sp.q, mode: "insensitive" } }, { subject: { contains: sp.q, mode: "insensitive" } }];
+  if (sp.c) where.campaignId = sp.c;
+  if (sp.a) where.messages = { some: { emailAccountId: sp.a } };
 
-  const [threads, counts] = await Promise.all([
+  const [threads, counts, campaigns, inboxes] = await Promise.all([
     db.thread.findMany({
       where,
       orderBy: { lastMessageAt: "desc" },
@@ -43,6 +47,8 @@ export default async function UniboxPage({ searchParams }: { searchParams: Promi
       },
     }),
     db.thread.groupBy({ by: ["summaryStatus"], where: { workspaceId: workspace.id, isRead: false }, _count: true }),
+    db.campaign.findMany({ where: { workspaceId: workspace.id, threads: { some: {} } }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    db.emailAccount.findMany({ where: { workspaceId: workspace.id }, select: { id: true, emailAddress: true }, orderBy: { emailAddress: "asc" } }),
   ]);
   const unread = counts.reduce((n, c) => n + c._count, 0);
   const activeId = sp.t ?? threads[0]?.id;
@@ -58,7 +64,7 @@ export default async function UniboxPage({ searchParams }: { searchParams: Promi
     : null;
   const qs = (patch: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
-    const merged = { f: sp.f, q: sp.q, t: sp.t, ...patch };
+    const merged = { f: sp.f, q: sp.q, t: sp.t, c: sp.c, a: sp.a, ...patch };
     for (const [k, v] of Object.entries(merged)) if (v) p.set(k, v);
     return `?${p}`;
   };
@@ -69,9 +75,24 @@ export default async function UniboxPage({ searchParams }: { searchParams: Promi
       <div className={cn("w-full shrink-0 flex-col border-r bg-white md:flex md:w-[380px]", sp.t ? "hidden" : "flex")}>
         <div className="border-b p-4">
           <h1 className="text-lg font-semibold text-royal-950">Unibox <span className="text-sm font-normal text-muted-foreground">· {unread} unread</span></h1>
-          <form className="mt-3">
+          <form className="mt-3 grid gap-2">
             {sp.f && <input type="hidden" name="f" value={sp.f} />}
             <Input name="q" defaultValue={sp.q} placeholder="Search email or subject…" />
+            <div className="flex gap-2">
+              <Select name="c" defaultValue={sp.c ?? ""} className="h-8 text-xs">
+                <option value="">All campaigns</option>
+                {campaigns.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </Select>
+              <Select name="a" defaultValue={sp.a ?? ""} className="h-8 text-xs">
+                <option value="">All inboxes</option>
+                {inboxes.map((a) => (
+                  <option key={a.id} value={a.id}>{a.emailAddress}</option>
+                ))}
+              </Select>
+              <Button size="sm" variant="outline">Go</Button>
+            </div>
           </form>
           <div className="mt-3 flex flex-wrap gap-1">
             {FILTERS.map((f) => (

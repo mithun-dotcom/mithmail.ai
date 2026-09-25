@@ -16,7 +16,7 @@ const items = [
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
-export function SidebarNav({ mobile }: { mobile?: boolean }) {
+export function SidebarNav({ mobile, unread = 0 }: { mobile?: boolean; unread?: number }) {
   const pathname = usePathname();
   return (
     <nav className={cn(mobile ? "flex gap-1 overflow-x-auto px-3 pb-2" : "flex flex-col gap-0.5 px-3")}>
@@ -33,6 +33,9 @@ export function SidebarNav({ mobile }: { mobile?: boolean }) {
           >
             <Icon className={cn("h-4 w-4", active && "text-gold-300")} />
             {label}
+            {href === "/unibox" && unread > 0 && (
+              <span className="ml-auto rounded-full bg-gold-300 px-1.5 text-[11px] font-semibold text-royal-950">{unread > 99 ? "99+" : unread}</span>
+            )}
           </Link>
         );
       })}

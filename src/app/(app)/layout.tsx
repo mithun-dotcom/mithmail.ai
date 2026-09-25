@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { signOut } from "@/auth";
 import { requireWorkspace } from "@/server/workspace";
+import { db } from "@/lib/db";
 import { Logo } from "@/components/logo";
 import { SidebarNav } from "@/components/sidebar-nav";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, workspace } = await requireWorkspace();
+  const unread = await db.thread.count({ where: { workspaceId: workspace.id, isRead: false } });
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
@@ -15,7 +17,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <Logo light />
           <Link href="/workspaces" className="max-w-[45%] truncate text-sm text-royal-200">{workspace.name}</Link>
         </div>
-        <SidebarNav mobile />
+        <SidebarNav mobile unread={unread} />
       </header>
       <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col bg-royal-950 text-royal-100 md:flex">
         <div className="px-5 py-5">
@@ -28,7 +30,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <span className="block text-[11px] uppercase tracking-wider text-royal-300">Workspace</span>
           <span className="block truncate font-medium text-white">{workspace.name}</span>
         </Link>
-        <SidebarNav />
+        <SidebarNav unread={unread} />
         <div className="mt-auto border-t border-white/10 p-4 text-sm">
           <p className="truncate text-royal-200">{user.email}</p>
           <form
