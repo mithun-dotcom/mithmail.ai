@@ -10,6 +10,7 @@ export const QUEUES = {
   scheduler: "campaign-scheduler",
   webhooks: "webhooks",
   placement: "placement-test",
+  ai: "ai-tasks",
 } as const;
 
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];
@@ -60,6 +61,11 @@ export interface WarmupJob {
   senderAccountId: string;
   recipientAccountId?: string;
   warmupLogId?: string;
+}
+export interface IcebreakerJob {
+  kind: "icebreakers";
+  campaignId: string;
+  leadIds: string[];
 }
 export interface PlacementJob {
   kind: "check";

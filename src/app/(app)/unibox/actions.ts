@@ -6,7 +6,9 @@ import { z } from "zod";
 import type { ThreadSummaryStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { domainOf } from "@/lib/utils";
-import { textToHtml } from "@/lib/template";
+import { htmlToText, textToHtml } from "@/lib/template";
+import { aiEnabled, suggestReply } from "@/server/ai";
+import { stripQuoted } from "@/server/inbox/reply-processor";
 import { requireWorkspace } from "@/server/workspace";
 import { transportFor } from "@/server/mail/pool";
 import { enrollSubsequences } from "@/server/inbox/reply-processor";
@@ -83,4 +85,18 @@ export async function sendReply(threadId: string, body: string): Promise<{ error
   ]);
   revalidatePath("/unibox");
   return { ok: true };
+}
+
+export async function suggestReplyAction(threadId: string): Promise<{ reply?: string; error?: string }> {
+  const { thread } = await ownThread(threadId, "ADMIN");
+  if (!aiEnabled()) return { error: "Set OPENAI_API_KEY to enable AI replies." };
+  try {
+    const conversation = thread.messages.map((m) => {
+      const text = htmlToText(m.body);
+      return { direction: m.direction, text: m.direction === "INBOUND" ? stripQuoted(text) || text : text };
+    });
+    return { reply: await suggestReply(conversation) };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
 }

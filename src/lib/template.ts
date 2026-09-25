@@ -104,7 +104,7 @@ export function extractVariables(input: string): string[] {
   return [...out];
 }
 
-export const BUILTIN_VARIABLES = ["first_name", "last_name", "email", "company_name", "linkedin_url", "sender_name", "signature", "day_of_week", "time_of_day"];
+export const BUILTIN_VARIABLES = ["first_name", "last_name", "email", "company_name", "icebreaker", "linkedin_url", "sender_name", "signature", "day_of_week", "time_of_day"];
 
 /** Plain text → minimal HTML (paragraphs + line breaks), escaping HTML. */
 export function textToHtml(text: string): string {

@@ -7,10 +7,10 @@ Cold email automation and deliverability platform. **Smart outbound scales horiz
 | Area | What you get |
 |---|---|
 | **Inboxes** | Unlimited Google / Microsoft (OAuth) and SMTP/IMAP inboxes, bulk CSV import, AES-256-GCM encrypted credentials, live connection test, per-inbox daily limit and send gap |
-| **Deliverability** | Daily SPF / DKIM / DMARC / MX checks per domain with fix hints, custom tracking domains (CNAME verified), ESP matching (Gmail → Google inbox, Outlook → Microsoft inbox) |
+| **Deliverability** | Daily SPF / DKIM / DMARC / MX checks per domain with fix hints, inbox placement tests against seed mailboxes, custom tracking domains (CNAME verified), ESP matching (Gmail → Google inbox, Outlook → Microsoft inbox) |
 | **Warm-up** | Peer network across workspaces: ramp-up schedule, AI-written conversations, spam-folder rescue, mark important, delayed human-like replies, placement stats |
 | **Campaigns** | Multi-step sequences, A/B variants with weights, nested spintax `{Hi\|Hey}`, merge tags `{{first_name\|there}}`, custom CSV variables, send windows per timezone, daily new-lead caps, stop-on-reply, threaded follow-ups, subsequences triggered by reply labels |
-| **AI** | Sequence writer (OpenAI, JSON output), reply classification (interested / meeting booked / not interested / out of office / wrong person / unsubscribe), warm-up content. Heuristic fallbacks when no API key is set |
+| **AI** | Sequence writer (OpenAI, JSON output), per-lead icebreakers (`{{icebreaker}}`, generated in the background), reply classification (interested / meeting booked / not interested / out of office / wrong person / unsubscribe), suggested replies in the Unibox, warm-up content. Heuristic fallbacks when no API key is set |
 | **Sending engine** | BullMQ scheduler + workers: inbox rotation, sticky sender per lead, randomized pacing, SMTP error classification (hard bounce / auth / retry), open pixel, signed click redirects, RFC 8058 one-click unsubscribe |
 | **Unibox** | Every reply from every inbox, auto-labelled, reply in thread from the original inbox, relabel, unread tracking |
 | **Analytics** | Dashboard KPIs, sends per day, open / reply rate trends, per-campaign / per-step / per-variant stats |
@@ -33,6 +33,7 @@ Cold email automation and deliverability platform. **Smart outbound scales horiz
                                               │  warmup-sync         every 15m│
                                               │  dns-check           daily    │
                                               │  webhooks            retries  │
+                                              │  placement-test · ai-tasks    │
                                               └───────────────────────────────┘
 ```
 
@@ -118,7 +119,6 @@ Unit tests cover the template engine (spintax / variables), DNS evaluators, cryp
 ## Roadmap
 
 * Stripe billing wired to `SubscriptionTier` / `PLANS` (limits are enforced today; plans are set manually)
-* Inbox placement tests UI (`PlacementTest` model exists)
 * Lead finder / enrichment and a Chrome extension
 * CRM integrations (HubSpot, Pipedrive) on top of the webhook events
 * Agency mode: client workspaces with white-label branding

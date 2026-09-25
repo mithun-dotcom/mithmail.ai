@@ -1,9 +1,10 @@
 import { Worker } from "bullmq";
 import { db } from "@/lib/db";
-import { getQueue, QUEUES, redisConnection, type FetchRepliesJob, type PlacementJob, type WarmupJob } from "@/server/queue";
+import { getQueue, QUEUES, redisConnection, type FetchRepliesJob, type IcebreakerJob, type PlacementJob, type WarmupJob } from "@/server/queue";
 import { syncInbox } from "@/server/inbox/imap-sync";
 import { planWarmup, sendWarmupEmail, sendWarmupReply } from "@/server/warmup/engine";
 import { checkPlacementTest } from "@/server/deliverability/placement";
+import { processIcebreakers } from "@/server/services/icebreakers";
 import { logger } from "./logger";
 
 /** Fans out one fetch job per IMAP-capable inbox. jobId de-duplicates overlapping runs. */
@@ -59,4 +60,9 @@ export function startPlacementWorker() {
     connection: redisConnection(),
     concurrency: 2,
   });
+}
+
+export function startAiWorker() {
+  // Low concurrency keeps OpenAI usage under rate limits.
+  return new Worker<IcebreakerJob>(QUEUES.ai, (job) => processIcebreakers(job.data), { connection: redisConnection(), concurrency: 2 });
 }

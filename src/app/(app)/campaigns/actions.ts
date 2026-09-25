@@ -6,7 +6,8 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireWorkspace } from "@/server/workspace";
-import { generateSequence, type GeneratedStep } from "@/server/ai";
+import { aiEnabled, generateSequence, type GeneratedStep } from "@/server/ai";
+import { queueIcebreakers } from "@/server/services/icebreakers";
 import { scheduleSchema, stepSchema, type ScheduleDraft, type StepDraft } from "@/lib/campaign-types";
 
 export type Result = { ok?: boolean; error?: string; message?: string };
@@ -218,4 +219,21 @@ export async function setSubsequence(id: string, parentCampaignId: string | null
   await db.campaign.update({ where: { id }, data: { parentCampaignId, triggerLabel: parentCampaignId ? label : null } });
   revalidatePath(`/campaigns/${id}`);
   return { ok: true, message: "Subsequence saved." };
+}
+
+export async function generateIcebreakersAction(id: string): Promise<Result> {
+  await ownCampaign(id);
+  if (!aiEnabled()) return { error: "Set OPENAI_API_KEY to enable AI icebreakers." };
+  const n = await queueIcebreakers(id);
+  return { ok: true, message: n ? `Generating icebreakers for ${n} leads in the background. Use {{icebreaker}} in your sequence.` : "Every lead already has an icebreaker." };
+}
+
+export async function setCampaignLeadStatus(id: string, campaignLeadIds: string[], status: "ACTIVE" | "PAUSED"): Promise<Result> {
+  await ownCampaign(id);
+  await db.campaignLead.updateMany({
+    where: { campaignId: id, id: { in: campaignLeadIds }, status: status === "ACTIVE" ? "PAUSED" : "ACTIVE" },
+    data: status === "ACTIVE" ? { status, nextSendAt: new Date() } : { status, nextSendAt: null },
+  });
+  revalidatePath(`/campaigns/${id}/leads`);
+  return { ok: true };
 }

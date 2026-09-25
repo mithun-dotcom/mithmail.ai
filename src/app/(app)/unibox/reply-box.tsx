@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Send } from "lucide-react";
+import { Send, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { sendReply } from "./actions";
+import { sendReply, suggestReplyAction } from "./actions";
 
 export function ReplyBox({ threadId }: { threadId: string }) {
   const [body, setBody] = useState("");
@@ -23,7 +23,26 @@ export function ReplyBox({ threadId }: { threadId: string }) {
         }}
       />
       <div className="mt-2 flex items-center justify-between">
-        <p className="text-xs text-red-700">{error}</p>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={pending}
+            onClick={() =>
+              start(async () => {
+                const res = await suggestReplyAction(threadId);
+                if (res.error) setError(res.error);
+                else if (res.reply) {
+                  setBody(res.reply);
+                  setError("");
+                }
+              })
+            }
+          >
+            <Sparkles className="text-gold-500" /> Suggest reply
+          </Button>
+          <p className="text-xs text-red-700">{error}</p>
+        </div>
         <Button
           disabled={pending || !body.trim()}
           onClick={() =>

@@ -155,3 +155,38 @@ export async function generateWarmupReply(original: string): Promise<string> {
   }
   return spin("{Thanks for this|Appreciate the note|Got it, thank you} — {sounds good to me|let's pick it up later this week|I'll take a look}!");
 }
+
+// ---------------------------------------------------------------------------
+// Unibox reply suggestions
+// ---------------------------------------------------------------------------
+
+export async function suggestReply(conversation: { direction: "INBOUND" | "OUTBOUND"; text: string }[], context?: string): Promise<string> {
+  const transcript = conversation
+    .slice(-8)
+    .map((m) => `${m.direction === "OUTBOUND" ? "ME" : "PROSPECT"}: ${m.text.slice(0, 1500)}`)
+    .join("\n\n");
+  const out = await json(
+    z.object({ reply: z.string() }),
+    `You are an SDR replying to a prospect in a cold email thread. Write the next reply from ME.
+Be brief (under 90 words), warm and specific to what the prospect said. If they are interested, propose two concrete time slots or ask for their availability.
+If they asked a question, answer it directly. If they are not interested, thank them politely. No signature. Return JSON {"reply": "..."}.`,
+    `${context ? `Context about my offer: ${context}\n\n` : ""}${transcript}`,
+    0.6,
+  );
+  return out.reply.trim();
+}
+
+// ---------------------------------------------------------------------------
+// Personalised icebreakers
+// ---------------------------------------------------------------------------
+
+export async function generateIcebreaker(lead: { firstName?: string | null; companyName?: string | null; title?: string | null; linkedinUrl?: string | null; extra?: string }, offer?: string) {
+  const out = await json(
+    z.object({ icebreaker: z.string() }),
+    `Write ONE personalised opening line (max 25 words) for a cold email. It must feel researched but never invent specific facts (no fake news, funding rounds or posts).
+Anchor it in the person's role and company. No greeting, no name at the start, no flattery clichés. Return JSON {"icebreaker": "..."}.`,
+    JSON.stringify({ ...lead, offer }),
+    0.8,
+  );
+  return out.icebreaker.trim();
+}

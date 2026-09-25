@@ -5,7 +5,7 @@ import type { Worker } from "bullmq";
 import { getQueue, QUEUES } from "@/server/queue";
 import { startDnsCheckWorker } from "./dns-check";
 import { startSchedulerWorker, startSendWorker, startWebhookWorker } from "./send-email";
-import { startFetchRepliesWorker, startPlacementWorker, startWarmupWorker } from "./inbox";
+import { startAiWorker, startFetchRepliesWorker, startPlacementWorker, startWarmupWorker } from "./inbox";
 import { logger } from "./logger";
 
 async function scheduleRepeatables() {
@@ -29,6 +29,7 @@ async function main() {
     webhooks: startWebhookWorker,
     dns: startDnsCheckWorker,
     placement: startPlacementWorker,
+    ai: startAiWorker,
   };
   // WORKERS=send,replies lets you scale each queue as its own process.
   const workers: Worker[] = Object.entries(all)
