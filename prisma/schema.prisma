@@ -290,10 +290,11 @@ model EmailAccount {
   trackingDomainId String? @db.Uuid
 
   // Warm-up
-  isWarmupEnabled  Boolean @default(false)
-  warmupDailyLimit Int     @default(20)
-  warmupRampUp     Int     @default(2) // +N warm-up emails per day until warmupDailyLimit
-  warmupReplyRate  Int     @default(30) // percent of received warm-ups to reply to
+  isWarmupEnabled  Boolean   @default(false)
+  warmupStartedAt  DateTime? // ramp-up day 1
+  warmupDailyLimit Int       @default(20)
+  warmupRampUp     Int       @default(2) // +N warm-up emails per day until warmupDailyLimit
+  warmupReplyRate  Int       @default(30) // percent of received warm-ups to reply to
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -459,7 +460,7 @@ model CampaignLead {
   currentStepNumber Int                @default(0) // 0 = not started
   status            CampaignLeadStatus @default(ACTIVE)
   assignedAccountId String?            @db.Uuid // sticky inbox so follow-ups come from the same sender
-  nextSendAt        DateTime?
+  nextSendAt        DateTime?          @default(now()) // null while an email is in flight
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
@@ -480,6 +481,7 @@ model EmailLog {
   messageId      String?        @unique // RFC 5322 Message-ID; matched against In-Reply-To / References
   variantId      String? // A/B variant that was sent
   subject        String?
+  body           String?        @db.Text // rendered HTML actually sent (shown in the Unibox thread)
   status         EmailLogStatus @default(QUEUED)
   errorMessage   String?        @db.Text
   openCount      Int            @default(0)

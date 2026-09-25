@@ -43,9 +43,10 @@ export function getQueue(name: QueueName): Queue {
 // ---- Job payloads ----------------------------------------------------------
 
 export interface SendEmailJob {
-  campaignLeadId: string;
-  stepNumber: number;
-  emailAccountId: string;
+  emailLogId: string;
+}
+export interface SchedulerJob {
+  tick?: number;
 }
 export interface FetchRepliesJob {
   emailAccountId: string;
@@ -63,4 +64,14 @@ export interface WebhookJob {
   webhookId: string;
   event: string;
   payload: Record<string, unknown>;
+}
+
+let sharedRedis: import("ioredis").Redis | null = null;
+/** Plain ioredis client for app-level keys (pacing, locks). */
+export async function redis() {
+  if (!sharedRedis) {
+    const { Redis } = await import("ioredis");
+    sharedRedis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", { maxRetriesPerRequest: 3 });
+  }
+  return sharedRedis;
 }

@@ -153,7 +153,7 @@ async function ownAccount(id: string) {
 }
 
 export async function updateAccount(id: string, _: ActionState, formData: FormData): Promise<ActionState> {
-  const { workspace } = await ownAccount(id);
+  const { workspace, account } = await ownAccount(id);
   const p = settingsSchema.safeParse(Object.fromEntries(formData));
   if (!p.success) return { error: p.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") };
   const d = p.data;
@@ -173,6 +173,7 @@ export async function updateAccount(id: string, _: ActionState, formData: FormDa
       maxDelaySeconds: d.maxDelaySeconds,
       signature: d.signature || null,
       isWarmupEnabled: d.isWarmupEnabled === "on",
+      ...(d.isWarmupEnabled === "on" && !account.warmupStartedAt ? { warmupStartedAt: new Date() } : {}),
       warmupDailyLimit: d.warmupDailyLimit,
       warmupRampUp: d.warmupRampUp,
       warmupReplyRate: d.warmupReplyRate,
