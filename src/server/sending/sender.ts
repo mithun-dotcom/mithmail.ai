@@ -123,7 +123,7 @@ export async function processSendJob(emailLogId: string, isFinalAttempt: boolean
   await db.$transaction([
     db.emailLog.update({
       where: { id: log.id },
-      data: { status: "SENT", sentAt: now, messageId: email.messageId, subject: email.subject, variantId: email.variantId, body: email.html ?? email.text, errorMessage: null },
+      data: { status: "SENT", sentAt: now, messageId: email.messageId, subject: email.subject, variantId: email.variantId, body: email.displayHtml, errorMessage: null },
     }),
     ...(lead.status === "UNCONTACTED" ? [db.lead.update({ where: { id: lead.id }, data: { status: "CONTACTED" } })] : []),
     db.campaignLead.updateMany({

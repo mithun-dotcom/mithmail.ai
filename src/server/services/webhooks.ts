@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 import { db } from "@/lib/db";
 import { decrypt } from "@/lib/crypto";
+import { assertPublicUrl } from "@/lib/net";
 import { getQueue, QUEUES, type WebhookJob } from "@/server/queue";
 
 export const WEBHOOK_EVENTS = [
@@ -42,6 +43,7 @@ export function signPayload(secret: string, body: string, timestamp: string) {
 export async function deliverWebhook(job: WebhookJob) {
   const hook = await db.webhook.findUnique({ where: { id: job.webhookId } });
   if (!hook || !hook.isActive) return { skipped: true };
+  if (process.env.NODE_ENV === "production" && !process.env.ALLOW_PRIVATE_WEBHOOKS) await assertPublicUrl(hook.url);
   const body = JSON.stringify(job.payload);
   const ts = Math.floor(Date.now() / 1000).toString();
   const res = await fetch(hook.url, {
@@ -55,6 +57,7 @@ export async function deliverWebhook(job: WebhookJob) {
     },
     body,
     signal: AbortSignal.timeout(10_000),
+    redirect: "manual", // never follow redirects into internal networks
   }).catch((e: Error) => ({ ok: false, status: 0, statusText: e.message }) as Response);
   await db.webhook.update({ where: { id: hook.id }, data: { lastStatus: res.status, lastFiredAt: new Date() } });
   if (!res.ok) throw new Error(`Webhook ${hook.url} responded ${res.status} ${res.statusText}`);

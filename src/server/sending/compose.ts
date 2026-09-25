@@ -25,6 +25,8 @@ export interface ComposedEmail {
   subject: string;
   html?: string;
   text: string;
+  /** Rendered body without tracking pixel/links or unsubscribe footer — what the Unibox shows. */
+  displayHtml: string;
   headers: Record<string, string>;
   inReplyTo?: string;
   references?: string[];
@@ -89,6 +91,7 @@ export function composeEmail(input: ComposeInput): ComposedEmail {
   const plainOnly = campaign.sendAsPlainText;
 
   // Tracking is applied to the HTML part only; the text part keeps the real URLs.
+  const displayHtml = html;
   let text = htmlToText(html);
   if (!plainOnly && campaign.trackClicks) html = rewriteLinks(html, base, logId);
 
@@ -112,6 +115,7 @@ export function composeEmail(input: ComposeInput): ComposedEmail {
     subject,
     html: plainOnly ? undefined : `<div>${html}</div>`,
     text,
+    displayHtml,
     headers,
     inReplyTo: threaded || previous?.messageId ? previous?.messageId ?? undefined : undefined,
     references,
