@@ -1,0 +1,527 @@
+// =============================================================================
+// MithMill — Cold Email SaaS
+// Prisma schema (PostgreSQL)
+//
+// Conventions
+//   - All primary keys are UUIDs.
+//   - Every tenant-owned row carries a workspaceId (directly or via its parent)
+//     so queries can always be scoped to a single workspace.
+//   - Fields suffixed "Enc" hold AES-256-GCM ciphertext produced by the app's
+//     encryption utility (Phase 2). Plaintext secrets never touch the database.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// =============================================================================
+// Enums
+// =============================================================================
+
+enum UserRole {
+  SUPER_ADMIN
+  USER
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  VIEWER
+}
+
+enum SubscriptionTier {
+  FREE
+  STARTER
+  GROWTH
+  SCALE
+  ENTERPRISE
+}
+
+enum EmailProvider {
+  GOOGLE
+  MICROSOFT
+  SMTP
+}
+
+enum EmailAccountStatus {
+  ACTIVE
+  PAUSED
+  ERROR // auth / connection failure; see lastError
+  DISCONNECTED
+}
+
+enum DnsRecordStatus {
+  PENDING // not checked yet
+  VALID
+  INVALID // record exists but is malformed / does not authorize the sender
+  MISSING
+}
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+}
+
+enum CampaignStepType {
+  EMAIL
+  CONDITION
+}
+
+enum LeadStatus {
+  UNCONTACTED
+  BOUNCED
+  REPLIED
+  UNSUBSCRIBED
+}
+
+enum CampaignLeadStatus {
+  ACTIVE
+  PAUSED
+  FINISHED
+}
+
+enum EmailLogStatus {
+  QUEUED // job placed on queue:send-email
+  SENT
+  DELIVERED
+  OPENED
+  CLICKED
+  BOUNCED
+  REPLIED
+  FAILED // SMTP rejected / worker error; see errorMessage
+}
+
+enum ThreadSummaryStatus {
+  INTERESTED
+  NOT_INTERESTED
+  MEETING
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum WarmupStatus {
+  SENT
+  LANDED_INBOX
+  RESCUED_FROM_SPAM
+  REPLIED
+  FAILED
+}
+
+// =============================================================================
+// 1. Users, Auth & Workspaces (multi-tenant)
+// =============================================================================
+
+model User {
+  id            String    @id @default(uuid()) @db.Uuid
+  email         String    @unique
+  name          String?
+  image         String? // avatar URL (field name required by the Auth.js Prisma adapter)
+  emailVerified DateTime?
+  role          UserRole  @default(USER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts    Account[]
+  sessions    Session[]
+  memberships WorkspaceMember[]
+}
+
+// --- Auth.js (NextAuth v5) adapter models -----------------------------------
+
+model Account {
+  id                String  @id @default(uuid()) @db.Uuid
+  userId            String  @db.Uuid
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(uuid()) @db.Uuid
+  sessionToken String   @unique
+  userId       String   @db.Uuid
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// --- Workspaces -------------------------------------------------------------
+
+model Workspace {
+  id               String           @id @default(uuid()) @db.Uuid
+  name             String
+  slug             String           @unique
+  subscriptionTier SubscriptionTier @default(FREE)
+  maxInboxes       Int              @default(5)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  members         WorkspaceMember[]
+  blocklist       GlobalBlocklist[]
+  emailAccounts   EmailAccount[]
+  trackingDomains TrackingDomain[]
+  campaigns       Campaign[]
+  leads           Lead[]
+  threads         Thread[]
+}
+
+model WorkspaceMember {
+  id          String        @id @default(uuid()) @db.Uuid
+  workspaceId String        @db.Uuid
+  userId      String        @db.Uuid
+  role        WorkspaceRole @default(VIEWER)
+  createdAt   DateTime      @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+model GlobalBlocklist {
+  id            String   @id @default(uuid()) @db.Uuid
+  workspaceId   String   @db.Uuid
+  emailOrDomain String // stored lower-cased, e.g. "jane@acme.com" or "acme.com"
+  createdAt     DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, emailOrDomain])
+}
+
+// =============================================================================
+// 2. Email Infrastructure
+// =============================================================================
+
+model EmailAccount {
+  id           String             @id @default(uuid()) @db.Uuid
+  workspaceId  String             @db.Uuid
+  emailAddress String
+  fromName     String?
+  provider     EmailProvider
+  status       EmailAccountStatus @default(ACTIVE)
+  lastError    String?
+
+  // SMTP (outbound)
+  smtpHost    String?
+  smtpPort    Int?
+  smtpUser    String?
+  smtpPassEnc String? @db.Text
+
+  // IMAP (inbound / reply detection / warm-up rescue)
+  imapHost    String?
+  imapPort    Int?
+  imapUser    String?
+  imapPassEnc String? @db.Text
+  imapLastUid Int? // high-water mark for queue:fetch-replies
+
+  // OAuth (Google / Microsoft Workspace)
+  oauthRefreshTokenEnc String? @db.Text
+
+  // Sending behaviour
+  dailyLimit       Int     @default(30)
+  minDelaySeconds  Int     @default(60) // jitter window used by queue:send-email
+  maxDelaySeconds  Int     @default(300)
+  signature        String? @db.Text
+  trackingDomainId String? @db.Uuid
+
+  // Warm-up
+  isWarmupEnabled  Boolean @default(false)
+  warmupDailyLimit Int     @default(20)
+  warmupRampUp     Int     @default(2) // +N warm-up emails per day until warmupDailyLimit
+  warmupReplyRate  Int     @default(30) // percent of received warm-ups to reply to
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace       Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  trackingDomain  TrackingDomain?        @relation(fields: [trackingDomainId], references: [id], onDelete: SetNull)
+  domainHealth    DomainHealth?
+  campaigns       CampaignEmailAccount[]
+  emailLogs       EmailLog[]
+  messages        Message[]
+  warmupsSent     WarmupLog[]            @relation("WarmupSender")
+  warmupsReceived WarmupLog[]            @relation("WarmupRecipient")
+
+  @@unique([workspaceId, emailAddress])
+  @@index([status, isWarmupEnabled])
+}
+
+model DomainHealth {
+  id             String          @id @default(uuid()) @db.Uuid
+  emailAccountId String          @unique @db.Uuid
+  domain         String
+  spfStatus      DnsRecordStatus @default(PENDING)
+  dkimStatus     DnsRecordStatus @default(PENDING)
+  dmarcStatus    DnsRecordStatus @default(PENDING)
+  mxStatus       DnsRecordStatus @default(PENDING)
+  spfRecord      String?         @db.Text
+  dkimSelector   String?
+  dmarcRecord    String?         @db.Text
+  lastCheckedAt  DateTime?
+
+  emailAccount EmailAccount @relation(fields: [emailAccountId], references: [id], onDelete: Cascade)
+
+  @@index([domain])
+}
+
+model TrackingDomain {
+  id            String    @id @default(uuid()) @db.Uuid
+  workspaceId   String    @db.Uuid
+  domainName    String    @unique // e.g. "track.acme.com" (CNAME -> MithMill tracking host)
+  cnameVerified Boolean   @default(false)
+  lastCheckedAt DateTime?
+  createdAt     DateTime  @default(now())
+
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  emailAccounts EmailAccount[]
+
+  @@index([workspaceId])
+}
+
+// =============================================================================
+// 3. Campaign Management
+// =============================================================================
+
+model Campaign {
+  id               String         @id @default(uuid()) @db.Uuid
+  workspaceId      String         @db.Uuid
+  name             String
+  status           CampaignStatus @default(DRAFT)
+  trackOpens       Boolean        @default(true)
+  trackClicks      Boolean        @default(false)
+  scheduleTimezone String         @default("UTC") // IANA tz, e.g. "America/New_York"
+  stopOnReply      Boolean        @default(true)
+  dailyLeadLimit   Int? // max new leads started per day (null = unlimited)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  workspace     Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  schedule      CampaignSchedule?
+  steps         CampaignStep[]
+  campaignLeads CampaignLead[]
+  emailAccounts CampaignEmailAccount[]
+  emailLogs     EmailLog[]
+  threads       Thread[]
+
+  @@index([workspaceId, status])
+}
+
+model CampaignSchedule {
+  id         String @id @default(uuid()) @db.Uuid
+  campaignId String @unique @db.Uuid
+  daysOfWeek Int[] // 0 = Sunday … 6 = Saturday
+  startTime  String // "HH:mm" in campaign.scheduleTimezone
+  endTime    String // "HH:mm" in campaign.scheduleTimezone
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+}
+
+model CampaignStep {
+  id             String           @id @default(uuid()) @db.Uuid
+  campaignId     String           @db.Uuid
+  stepNumber     Int
+  type           CampaignStepType @default(EMAIL)
+  waitDays       Int              @default(0) // days after previous step
+  subject        String?
+  bodyHtml       String?          @db.Text
+  bodySpintax    String?          @db.Text // raw template, e.g. "{Hi|Hello} {{first_name}}"
+  abTestVariants Json? // [{ id, subject, bodySpintax, weight }]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  campaign  Campaign   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  emailLogs EmailLog[]
+
+  @@unique([campaignId, stepNumber])
+}
+
+// Inboxes linked to a campaign — the pool the dispatcher round-robins across.
+model CampaignEmailAccount {
+  campaignId     String   @db.Uuid
+  emailAccountId String   @db.Uuid
+  createdAt      DateTime @default(now())
+
+  campaign     Campaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  emailAccount EmailAccount @relation(fields: [emailAccountId], references: [id], onDelete: Cascade)
+
+  @@id([campaignId, emailAccountId])
+  @@index([emailAccountId])
+}
+
+// =============================================================================
+// 4. Leads & Sequence Data
+// =============================================================================
+
+model Lead {
+  id              String     @id @default(uuid()) @db.Uuid
+  workspaceId     String     @db.Uuid
+  email           String // stored lower-cased
+  firstName       String?
+  lastName        String?
+  companyName     String?
+  linkedinUrl     String?
+  customVariables Json? // arbitrary CSV columns -> {{variable}} merge tags
+  status          LeadStatus @default(UNCONTACTED)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  campaignLeads CampaignLead[]
+  emailLogs     EmailLog[]
+  threads       Thread[]
+
+  @@unique([workspaceId, email])
+  @@index([workspaceId, status])
+}
+
+model CampaignLead {
+  id                String             @id @default(uuid()) @db.Uuid
+  campaignId        String             @db.Uuid
+  leadId            String             @db.Uuid
+  currentStepNumber Int                @default(0) // 0 = not started
+  status            CampaignLeadStatus @default(ACTIVE)
+  assignedAccountId String?            @db.Uuid // sticky inbox so follow-ups come from the same sender
+  nextSendAt        DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  lead     Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, leadId])
+  @@index([status, nextSendAt])
+}
+
+// Sending history — one row per outbound campaign email.
+model EmailLog {
+  id             String         @id @default(uuid()) @db.Uuid
+  campaignId     String         @db.Uuid
+  campaignStepId String?        @db.Uuid
+  leadId         String         @db.Uuid
+  emailAccountId String         @db.Uuid
+  messageId      String?        @unique // RFC 5322 Message-ID; matched against In-Reply-To / References
+  variantId      String? // A/B variant that was sent
+  subject        String?
+  status         EmailLogStatus @default(QUEUED)
+  errorMessage   String?        @db.Text
+  openCount      Int            @default(0)
+  clickCount     Int            @default(0)
+  sentAt         DateTime?
+  openedAt       DateTime?
+  clickedAt      DateTime?
+  repliedAt      DateTime?
+  bouncedAt      DateTime?
+  createdAt      DateTime       @default(now())
+
+  campaign     Campaign      @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  campaignStep CampaignStep? @relation(fields: [campaignStepId], references: [id], onDelete: SetNull)
+  lead         Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  emailAccount EmailAccount  @relation(fields: [emailAccountId], references: [id], onDelete: Cascade)
+
+  @@index([emailAccountId, sentAt]) // daily-limit checks
+  @@index([campaignId, status, sentAt]) // analytics
+  @@index([leadId])
+}
+
+// =============================================================================
+// 5. Unified Inbox
+// =============================================================================
+
+model Thread {
+  id            String               @id @default(uuid()) @db.Uuid
+  workspaceId   String               @db.Uuid
+  leadId        String?              @db.Uuid
+  campaignId    String?              @db.Uuid
+  leadEmail     String
+  subject       String?
+  summaryStatus ThreadSummaryStatus?
+  isRead        Boolean              @default(false)
+  lastMessageAt DateTime             @default(now())
+  createdAt     DateTime             @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  lead      Lead?     @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  campaign  Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  messages  Message[]
+
+  @@index([workspaceId, lastMessageAt])
+  @@index([workspaceId, leadEmail])
+}
+
+model Message {
+  id             String           @id @default(uuid()) @db.Uuid
+  threadId       String           @db.Uuid
+  emailAccountId String?          @db.Uuid
+  direction      MessageDirection
+  messageId      String?          @unique // RFC 5322 Message-ID (dedupes IMAP fetches)
+  inReplyTo      String?
+  fromEmail      String
+  toEmail        String
+  subject        String?
+  body           String           @db.Text
+  receivedAt     DateTime         @default(now())
+
+  thread       Thread        @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  emailAccount EmailAccount? @relation(fields: [emailAccountId], references: [id], onDelete: SetNull)
+
+  @@index([threadId, receivedAt])
+}
+
+// =============================================================================
+// 6. Warm-up Network (queue:warmup-sync)
+// =============================================================================
+
+// Cross-tenant by design: sender and recipient usually belong to different workspaces.
+model WarmupLog {
+  id                 String       @id @default(uuid()) @db.Uuid
+  senderAccountId    String       @db.Uuid
+  recipientAccountId String       @db.Uuid
+  messageId          String       @unique
+  subject            String
+  status             WarmupStatus @default(SENT)
+  landedInSpam       Boolean      @default(false)
+  replyScheduledAt   DateTime?
+  sentAt             DateTime     @default(now())
+  repliedAt          DateTime?
+
+  sender    EmailAccount @relation("WarmupSender", fields: [senderAccountId], references: [id], onDelete: Cascade)
+  recipient EmailAccount @relation("WarmupRecipient", fields: [recipientAccountId], references: [id], onDelete: Cascade)
+
+  @@index([senderAccountId, sentAt])
+  @@index([recipientAccountId, status])
+}
