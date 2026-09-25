@@ -114,6 +114,8 @@ const ok = crypto.timingSafeEqual(Buffer.from(`sha256=${expected}`), Buffer.from
 npm run typecheck && npm run lint && npm test && npm run build
 ```
 
+`npm run test:integration` runs the whole pipeline against real PostgreSQL + Redis with in-process SMTP/IMAP servers. It covers inbox rotation, follow-up priority and threading, hard bounces, IMAP reply detection with stop-on-reply, and a full warm-up cycle (spam rescue → flag → reply).
+
 Unit tests cover the template engine (spintax / variables), DNS evaluators, crypto, scheduling windows, inbox assignment, email composition and tracking, SMTP error classification, the SSRF guard, reply heuristics and warm-up ramp-up.
 
 ## Roadmap
