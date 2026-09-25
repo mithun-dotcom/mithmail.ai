@@ -27,7 +27,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ prov
     client_secret: secret ?? "",
     code,
     grant_type: "authorization_code",
-    redirect_uri: new URL(`/api/oauth/${provider.toLowerCase()}/callback`, req.nextUrl.origin).toString(),
+    redirect_uri: new URL(`/api/oauth/${provider.toLowerCase()}/callback`, process.env.APP_URL ?? req.nextUrl.origin).toString(),
   });
   const tokenRes = await fetch(OAUTH[provider].token, { method: "POST", body });
   const tokens = (await tokenRes.json()) as { refresh_token?: string; id_token?: string; error_description?: string };

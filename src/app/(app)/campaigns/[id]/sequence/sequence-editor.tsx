@@ -216,7 +216,13 @@ export function SequenceEditor({
           <CardContent>
             <p className="text-xs text-muted-foreground">To: {sample.email}</p>
             <p className="mt-1 font-medium">{preview.subject || <span className="text-muted-foreground">(no subject)</span>}</p>
-            <div className="prose-sm mt-3 space-y-3 text-sm [&_p]:leading-relaxed" dangerouslySetInnerHTML={{ __html: preview.html }} />
+            {/* Sandboxed: template HTML is authored by any workspace member, so it never runs in the app's origin. */}
+            <iframe
+              title="Email preview"
+              sandbox=""
+              className="mt-3 h-80 w-full rounded-md border bg-white"
+              srcDoc={`<!doctype html><html><head><meta charset="utf-8"><style>body{font:14px/1.6 system-ui,sans-serif;color:#141c52;margin:12px}p{margin:0 0 12px}</style></head><body>${preview.html}</body></html>`}
+            />
           </CardContent>
         </Card>
         <AiWriter enabled={aiEnabled} onResult={(steps) => s.replaceAll(steps)} />

@@ -12,7 +12,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ prov
   if (!id) return new NextResponse(`${provider} OAuth is not configured`, { status: 400 });
 
   const state = randomToken(16);
-  const redirectUri = new URL(`/api/oauth/${provider.toLowerCase()}/callback`, req.nextUrl.origin).toString();
+  const redirectUri = new URL(`/api/oauth/${provider.toLowerCase()}/callback`, process.env.APP_URL ?? req.nextUrl.origin).toString();
   const url = new URL(OAUTH[provider].authorize);
   url.searchParams.set("client_id", id);
   url.searchParams.set("redirect_uri", redirectUri);
