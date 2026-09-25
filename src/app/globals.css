@@ -29,4 +29,9 @@
   body {
     @apply bg-background text-foreground antialiased;
   }
+  /* Grid items default to min-width:auto, which lets wide tables/charts push the
+     page past the viewport. Let them shrink; tables scroll inside their wrapper. */
+  .grid > * {
+    min-width: 0;
+  }
 }

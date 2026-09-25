@@ -8,8 +8,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const { user, workspace } = await requireWorkspace();
 
   return (
-    <div className="flex min-h-screen">
-      <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col bg-royal-950 text-royal-100">
+    <div className="flex min-h-screen flex-col md:flex-row">
+      {/* Mobile top bar */}
+      <header className="sticky top-0 z-20 bg-royal-950 text-royal-100 md:hidden">
+        <div className="flex items-center justify-between px-4 py-3">
+          <Logo light />
+          <Link href="/workspaces" className="max-w-[45%] truncate text-sm text-royal-200">{workspace.name}</Link>
+        </div>
+        <SidebarNav mobile />
+      </header>
+      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col bg-royal-950 text-royal-100 md:flex">
         <div className="px-5 py-5">
           <Logo light />
         </div>
@@ -34,7 +42,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
       <main className="min-w-0 flex-1 bg-muted/40">
-        <div className="mx-auto max-w-7xl p-8">{children}</div>
+        <div className="mx-auto max-w-7xl p-4 md:p-8">{children}</div>
       </main>
     </div>
   );

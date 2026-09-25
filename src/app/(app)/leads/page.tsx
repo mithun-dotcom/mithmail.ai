@@ -1,21 +1,20 @@
 import Link from "next/link";
 import type { LeadStatus, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { requireWorkspace } from "@/server/workspace";
+import { canEdit, requireWorkspace } from "@/server/workspace";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Table, TBody, THead } from "@/components/ui/table";
-import { StatusBadge } from "@/components/status-badge";
 import { LeadImporter } from "./lead-importer";
+import { LeadList } from "./lead-list";
 
 const PAGE = 50;
 const STATUSES: LeadStatus[] = ["UNCONTACTED", "CONTACTED", "REPLIED", "BOUNCED", "UNSUBSCRIBED"];
 
 export default async function LeadsPage({ searchParams }: { searchParams: Promise<{ q?: string; status?: string; page?: string }> }) {
-  const { workspace } = await requireWorkspace();
+  const { workspace, role } = await requireWorkspace();
   const sp = await searchParams;
   const page = Math.max(1, Number(sp.page) || 1);
   const where: Prisma.LeadWhereInput = { workspaceId: workspace.id };
@@ -59,26 +58,19 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
             </Select>
             <Button variant="outline">Filter</Button>
           </form>
-          <Table>
-            <THead>
-              <tr><th>Email</th><th>Name</th><th>Company</th><th>Provider</th><th>Campaigns</th><th>Status</th></tr>
-            </THead>
-            <TBody>
-              {leads.map((l) => (
-                <tr key={l.id}>
-                  <td className="font-medium">{l.email}</td>
-                  <td>{[l.firstName, l.lastName].filter(Boolean).join(" ") || "—"}</td>
-                  <td>{l.companyName ?? "—"}</td>
-                  <td className="text-xs text-muted-foreground">{l.esp.toLowerCase()}</td>
-                  <td className="text-xs">{l.campaignLeads.map((c) => c.campaign.name).join(", ") || "—"}</td>
-                  <td><StatusBadge status={l.status} /></td>
-                </tr>
-              ))}
-              {leads.length === 0 && (
-                <tr><td colSpan={6} className="py-10 text-center text-muted-foreground">No leads yet — import a CSV above.</td></tr>
-              )}
-            </TBody>
-          </Table>
+          <LeadList
+            canEdit={canEdit(role)}
+            campaigns={campaigns}
+            rows={leads.map((l) => ({
+              id: l.id,
+              email: l.email,
+              name: [l.firstName, l.lastName].filter(Boolean).join(" "),
+              company: l.companyName,
+              esp: l.esp,
+              campaigns: l.campaignLeads.map((c) => c.campaign.name).join(", "),
+              status: l.status,
+            }))}
+          />
           {pages > 1 && (
             <div className="flex items-center justify-between border-t p-3 text-sm">
               <span className="text-muted-foreground">Page {page} of {pages}</span>

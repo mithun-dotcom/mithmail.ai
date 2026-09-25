@@ -64,9 +64,9 @@ export default async function UniboxPage({ searchParams }: { searchParams: Promi
   };
 
   return (
-    <div className="-m-8 flex h-screen">
+    <div className="-m-4 flex h-[calc(100vh-6.5rem)] md:-m-8 md:h-screen">
       {/* Thread list */}
-      <div className="flex w-[380px] shrink-0 flex-col border-r bg-white">
+      <div className={cn("w-full shrink-0 flex-col border-r bg-white md:flex md:w-[380px]", sp.t ? "hidden" : "flex")}>
         <div className="border-b p-4">
           <h1 className="text-lg font-semibold text-royal-950">Unibox <span className="text-sm font-normal text-muted-foreground">· {unread} unread</span></h1>
           <form className="mt-3">
@@ -110,11 +110,12 @@ export default async function UniboxPage({ searchParams }: { searchParams: Promi
       </div>
 
       {/* Conversation */}
-      <div className="flex min-w-0 flex-1 flex-col bg-muted/30">
+      <div className={cn("min-w-0 flex-1 flex-col bg-muted/30 md:flex", sp.t ? "flex" : "hidden")}>
         {active ? (
           <>
             <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-white px-6 py-4">
               <div className="min-w-0">
+                <Link href={qs({ t: undefined })} className="mb-1 block text-xs text-royal-700 md:hidden">← All conversations</Link>
                 <p className="truncate font-semibold">{active.subject}</p>
                 <p className="text-sm text-muted-foreground">
                   {active.leadEmail}

@@ -16,10 +16,10 @@ const items = [
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
-export function SidebarNav() {
+export function SidebarNav({ mobile }: { mobile?: boolean }) {
   const pathname = usePathname();
   return (
-    <nav className="flex flex-col gap-0.5 px-3">
+    <nav className={cn(mobile ? "flex gap-1 overflow-x-auto px-3 pb-2" : "flex flex-col gap-0.5 px-3")}>
       {items.map(({ href, label, icon: Icon }) => {
         const active = pathname === href || pathname.startsWith(`${href}/`);
         return (
@@ -27,7 +27,7 @@ export function SidebarNav() {
             key={href}
             href={href}
             className={cn(
-              "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+              "flex shrink-0 items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
               active ? "bg-white/10 font-medium text-white" : "text-royal-200 hover:bg-white/5 hover:text-white",
             )}
           >
