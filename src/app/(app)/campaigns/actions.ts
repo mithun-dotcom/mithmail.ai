@@ -9,6 +9,7 @@ import { requireWorkspace } from "@/server/workspace";
 import { aiEnabled, generateSequence, type GeneratedStep } from "@/server/ai";
 import { queueIcebreakers } from "@/server/services/icebreakers";
 import { scheduleSchema, stepSchema, type ScheduleDraft, type StepDraft } from "@/lib/campaign-types";
+import { validateTemplate } from "@/lib/template";
 
 export type Result = { ok?: boolean; error?: string; message?: string };
 
@@ -139,6 +140,10 @@ export async function launchCampaign(id: string): Promise<Result> {
   const first = c.steps.find((s) => s.stepNumber === 1);
   if (!first?.subject?.trim()) problems.push("Step 1 needs a subject.");
   if (c.steps.some((s) => !s.bodySpintax?.trim() && !s.bodyHtml?.trim())) problems.push("Every step needs a body.");
+  for (const st of c.steps) {
+    const issues = [...validateTemplate(st.subject ?? ""), ...validateTemplate(st.bodySpintax ?? "")];
+    if (issues.length) problems.push(`Step ${st.stepNumber}: ${issues[0]}`);
+  }
   if (!c.schedule || c.schedule.daysOfWeek.length === 0) problems.push("Set a sending schedule.");
   if (c._count.emailAccounts === 0) problems.push("Attach at least one sending inbox.");
   if (c._count.campaignLeads === 0) problems.push("Add leads.");

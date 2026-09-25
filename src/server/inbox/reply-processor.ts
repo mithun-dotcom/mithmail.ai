@@ -2,6 +2,7 @@ import type { EmailAccount, ThreadSummaryStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { classifyReply } from "@/server/ai";
 import { emitEvent, type WebhookEvent } from "@/server/services/webhooks";
+import { enforceBounceProtection } from "@/server/sending/sender";
 
 export interface InboundMessage {
   messageId: string | null;
@@ -51,6 +52,7 @@ async function handleBounce(account: EmailAccount, msg: InboundMessage): Promise
     db.campaignLead.updateMany({ where: { leadId: log.leadId, status: "ACTIVE" }, data: { status: "FINISHED", nextSendAt: null } }),
   ]);
   await emitEvent(log.campaign.workspaceId, "email.bounced", { leadEmail: log.lead.email, campaignId: log.campaignId });
+  await enforceBounceProtection(account.id);
   return true;
 }
 

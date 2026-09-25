@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { ArrowDown, ArrowUp, Clock, Plus, RefreshCw, Sparkles, Trash2 } from "lucide-react";
 import { useSequence } from "@/stores/sequence-store";
 import type { StepDraft } from "@/lib/campaign-types";
-import { BUILTIN_VARIABLES, render, textToHtml } from "@/lib/template";
+import { BUILTIN_VARIABLES, render, textToHtml, validateTemplate } from "@/lib/template";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -198,6 +198,9 @@ export function SequenceEditor({
               <span className="text-xs text-muted-foreground">Variant A always has weight 50.</span>
             </div>
           )}
+          {[...validateTemplate(current.subject), ...validateTemplate(current.body)].map((issue) => (
+            <p key={issue} className="rounded-md bg-amber-50 px-3 py-1.5 text-xs text-amber-900">⚠ {issue}</p>
+          ))}
           <p className="text-xs text-muted-foreground">
             Spintax: <code>{"{Hi|Hello|Hey}"}</code> · Variables: <code>{"{{first_name|fallback}}"}</code> · Your inbox signature is appended automatically.
           </p>

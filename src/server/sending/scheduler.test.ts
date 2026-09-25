@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LeadEsp } from "@prisma/client";
-import { assignLeads, espMatches } from "./scheduler";
+import { assignLeads, effectiveDailyLimit, espMatches } from "./scheduler";
 
 const lead = (id: string, esp: LeadEsp) => ({ id, lead: { esp } });
 const acct = (id: string, provider: "GOOGLE" | "MICROSOFT" | "SMTP") => ({ id, provider });
@@ -36,5 +36,21 @@ describe("assignLeads", () => {
     const res = assignLeads(leads, [acct("a", "SMTP"), acct("b", "SMTP"), acct("c", "SMTP")], false);
     expect(res).toHaveLength(3);
     expect(new Set(res.map((r) => r.account.id)).size).toBe(3);
+  });
+});
+
+describe("effectiveDailyLimit", () => {
+  it("stays within 80-100% and is stable within a day", () => {
+    const a = { id: "acct-1", dailyLimit: 50 };
+    const d = new Date("2026-09-25T00:00:00Z");
+    const v = effectiveDailyLimit(a, d);
+    expect(v).toBeGreaterThanOrEqual(40);
+    expect(v).toBeLessThanOrEqual(50);
+    expect(effectiveDailyLimit(a, d)).toBe(v);
+  });
+  it("varies across days", () => {
+    const a = { id: "acct-2", dailyLimit: 100 };
+    const values = new Set(Array.from({ length: 10 }, (_, i) => effectiveDailyLimit(a, new Date(Date.UTC(2026, 8, 1 + i)))));
+    expect(values.size).toBeGreaterThan(3);
   });
 });

@@ -1,6 +1,7 @@
 import { Prisma, type CampaignLead, type EmailAccount, type Lead, type LeadEsp } from "@prisma/client";
 import { db } from "@/lib/db";
 import { isWithinWindow, randomBetween } from "@/lib/schedule";
+import { seededRng } from "@/lib/template";
 import { getQueue, QUEUES, redis, type SendEmailJob } from "@/server/queue";
 import { emitEvent } from "@/server/services/webhooks";
 
@@ -45,6 +46,15 @@ export function assignLeads<L extends { id: string; lead: Pick<Lead, "esp"> }, A
     out.push({ lead: l, account: a });
   }
   return out;
+}
+
+/**
+ * Effective daily limit: 80–100% of the configured limit, varying by day but stable
+ * within a day, so volume never shows a flat, machine-like pattern.
+ */
+export function effectiveDailyLimit(account: Pick<EmailAccount, "id" | "dailyLimit">, day: Date): number {
+  const f = 0.8 + seededRng(`${account.id}:${day.toISOString().slice(0, 10)}`)() * 0.2;
+  return Math.max(1, Math.round(account.dailyLimit * f));
 }
 
 interface AccountState {
@@ -135,7 +145,7 @@ export async function runSchedulerTick(now = new Date()): Promise<{ queued: numb
     const states: AccountState[] = c.emailAccounts
       .map((e) => e.emailAccount)
       .filter((a) => a.status === "ACTIVE")
-      .map((a) => ({ account: a, remaining: a.dailyLimit - (used.get(a.id) ?? 0) }));
+      .map((a) => ({ account: a, remaining: effectiveDailyLimit(a, dayStart) - (used.get(a.id) ?? 0) }));
     const poolIds = new Set(states.map((s) => s.account.id));
     const free = states.filter((s) => s.remaining > 0 && !busy.has(s.account.id) && (pace.get(s.account.id) ?? 0) <= now.getTime());
 

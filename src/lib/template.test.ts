@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractVariables, fillVariables, htmlToText, render, seededRng, spin, textToHtml } from "./template";
+import { extractVariables, fillVariables, htmlToText, render, seededRng, spin, textToHtml, validateTemplate } from "./template";
 
 const first = () => 0; // always pick first option
 const last = () => 0.9999;
@@ -64,5 +64,19 @@ describe("helpers", () => {
     const html = textToHtml("Hi <b>\n\nLine1\nLine2");
     expect(html).toBe("<p>Hi &lt;b&gt;</p><p>Line1<br>Line2</p>");
     expect(htmlToText(html)).toBe("Hi <b>\n\nLine1\nLine2");
+  });
+});
+
+describe("validateTemplate", () => {
+  it("accepts valid templates", () => {
+    expect(validateTemplate("{Hi|Hey {{first_name|there}}}, {{company_name}}")).toEqual([]);
+  });
+  it("flags unbalanced spintax", () => {
+    expect(validateTemplate("{Hi|Hey there")).toEqual(["Spintax has an unclosed '{'."]);
+    expect(validateTemplate("Hi} there")).toEqual(["Spintax has a '}' without a matching '{'."]);
+  });
+  it("flags broken variables", () => {
+    expect(validateTemplate("Hi {{first_name")).toContain("A {{variable}} is not closed properly.");
+    expect(validateTemplate("Hi {{ }}")).toContain("Empty {{ }} variable.");
   });
 });

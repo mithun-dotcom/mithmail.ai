@@ -131,3 +131,24 @@ export function htmlToText(html: string): string {
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
+
+/** Human-readable problems in a template (unbalanced spintax, broken variables). Empty = OK. */
+export function validateTemplate(input: string): string[] {
+  const issues: string[] = [];
+  const withoutVars = input.replace(/\{\{[^{}]*\}\}/g, "");
+  if (/\{\{|\}\}/.test(withoutVars)) issues.push("A {{variable}} is not closed properly.");
+  let depth = 0;
+  for (const ch of withoutVars) {
+    if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth < 0) break;
+    }
+  }
+  if (depth > 0) issues.push("Spintax has an unclosed '{'.");
+  if (depth < 0) issues.push("Spintax has a '}' without a matching '{'.");
+  for (const m of input.matchAll(/\{\{\s*([^{}|]*?)\s*(?:\|[^{}]*)?\}\}/g)) {
+    if (!m[1]) issues.push("Empty {{ }} variable.");
+  }
+  return [...new Set(issues)];
+}

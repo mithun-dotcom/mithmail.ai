@@ -8,6 +8,27 @@ const DAY = 24 * 3600 * 1000;
 
 export class RetryableSendError extends Error {}
 
+const BOUNCE_WINDOW_MS = 24 * 3600_000;
+const BOUNCE_MIN_SAMPLE = 20;
+const BOUNCE_MAX_RATE = 0.05;
+
+/** Bounce protection: pause an inbox whose 24h hard-bounce rate exceeds 5% (min. 20 sends). */
+export async function enforceBounceProtection(emailAccountId: string) {
+  const since = new Date(Date.now() - BOUNCE_WINDOW_MS);
+  const [sent, bounced] = await Promise.all([
+    db.emailLog.count({ where: { emailAccountId, sentAt: { gte: since } } }),
+    db.emailLog.count({ where: { emailAccountId, status: "BOUNCED", sentAt: { gte: since } } }),
+  ]);
+  if (sent >= BOUNCE_MIN_SAMPLE && bounced / sent > BOUNCE_MAX_RATE) {
+    await db.emailAccount.update({
+      where: { id: emailAccountId },
+      data: { status: "PAUSED", lastError: `Auto-paused: ${bounced}/${sent} emails bounced in 24h (>${BOUNCE_MAX_RATE * 100}%). Clean your lead list, then resume.` },
+    });
+    return true;
+  }
+  return false;
+}
+
 type SmtpError = Error & { responseCode?: number; command?: string; code?: string };
 
 export function classifySmtpError(e: SmtpError): "bounce" | "auth" | "retry" {
@@ -100,6 +121,7 @@ export async function processSendJob(emailLogId: string, isFinalAttempt: boolean
         db.campaignLead.updateMany({ where: { leadId: lead.id, status: "ACTIVE" }, data: { status: "FINISHED", nextSendAt: null } }),
       ]);
       await emitEvent(campaign.workspaceId, "email.bounced", { leadEmail: lead.email, campaignId: campaign.id, reason: e.message });
+      await enforceBounceProtection(account.id);
       return "bounced";
     }
     if (kind === "auth") {
