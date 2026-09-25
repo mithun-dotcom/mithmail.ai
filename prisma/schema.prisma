@@ -77,6 +77,7 @@ enum CampaignStepType {
 
 enum LeadStatus {
   UNCONTACTED
+  CONTACTED
   BOUNCED
   REPLIED
   UNSUBSCRIBED
@@ -99,10 +100,35 @@ enum EmailLogStatus {
   FAILED // SMTP rejected / worker error; see errorMessage
 }
 
+// AI reply categorisation (Unibox labels). Also used as the trigger for subsequences.
 enum ThreadSummaryStatus {
   INTERESTED
+  MEETING_BOOKED
   NOT_INTERESTED
-  MEETING
+  OUT_OF_OFFICE
+  WRONG_PERSON
+  UNSUBSCRIBE_REQUEST
+  NEUTRAL
+}
+
+enum LeadEsp {
+  GOOGLE
+  MICROSOFT
+  OTHER
+  UNKNOWN
+}
+
+enum EmailEventType {
+  OPEN
+  CLICK
+  UNSUBSCRIBE
+}
+
+enum PlacementTestStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
 }
 
 enum MessageDirection {
@@ -181,13 +207,14 @@ model VerificationToken {
 // --- Workspaces -------------------------------------------------------------
 
 model Workspace {
-  id               String           @id @default(uuid()) @db.Uuid
-  name             String
-  slug             String           @unique
-  subscriptionTier SubscriptionTier @default(FREE)
-  maxInboxes       Int              @default(5)
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  id                String           @id @default(uuid()) @db.Uuid
+  name              String
+  slug              String           @unique
+  subscriptionTier  SubscriptionTier @default(FREE)
+  maxInboxes        Int              @default(5)
+  monthlyEmailQuota Int              @default(1000)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
 
   members         WorkspaceMember[]
   blocklist       GlobalBlocklist[]
@@ -196,6 +223,9 @@ model Workspace {
   campaigns       Campaign[]
   leads           Lead[]
   threads         Thread[]
+  webhooks        Webhook[]
+  apiKeys         ApiKey[]
+  placementTests  PlacementTest[]
 }
 
 model WorkspaceMember {
@@ -318,17 +348,25 @@ model TrackingDomain {
 // =============================================================================
 
 model Campaign {
-  id               String         @id @default(uuid()) @db.Uuid
-  workspaceId      String         @db.Uuid
-  name             String
-  status           CampaignStatus @default(DRAFT)
-  trackOpens       Boolean        @default(true)
-  trackClicks      Boolean        @default(false)
-  scheduleTimezone String         @default("UTC") // IANA tz, e.g. "America/New_York"
-  stopOnReply      Boolean        @default(true)
-  dailyLeadLimit   Int? // max new leads started per day (null = unlimited)
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  id                 String         @id @default(uuid()) @db.Uuid
+  workspaceId        String         @db.Uuid
+  name               String
+  status             CampaignStatus @default(DRAFT)
+  trackOpens         Boolean        @default(true)
+  trackClicks        Boolean        @default(false)
+  scheduleTimezone   String         @default("UTC") // IANA tz, e.g. "America/New_York"
+  stopOnReply        Boolean        @default(true)
+  dailyLeadLimit     Int? // max new leads started per day (null = unlimited)
+  espMatching        Boolean        @default(true) // prefer Google->Google, Microsoft->Microsoft sender/recipient pairs
+  includeUnsubscribe Boolean        @default(false) // append a one-click unsubscribe link + List-Unsubscribe header
+  sendAsPlainText    Boolean        @default(false)
+
+  // Subsequences: a child campaign that leads enter automatically when a reply
+  // on the parent campaign is labelled with triggerLabel.
+  parentCampaignId String?              @db.Uuid
+  triggerLabel     ThreadSummaryStatus?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
 
   workspace     Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   schedule      CampaignSchedule?
@@ -337,8 +375,11 @@ model Campaign {
   emailAccounts CampaignEmailAccount[]
   emailLogs     EmailLog[]
   threads       Thread[]
+  parent        Campaign?              @relation("Subsequences", fields: [parentCampaignId], references: [id], onDelete: Cascade)
+  subsequences  Campaign[]             @relation("Subsequences")
 
   @@index([workspaceId, status])
+  @@index([parentCampaignId])
 }
 
 model CampaignSchedule {
@@ -397,6 +438,8 @@ model Lead {
   linkedinUrl     String?
   customVariables Json? // arbitrary CSV columns -> {{variable}} merge tags
   status          LeadStatus @default(UNCONTACTED)
+  esp             LeadEsp    @default(UNKNOWN) // recipient mailbox provider, resolved from MX records
+  unsubscribedAt  DateTime?
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
@@ -448,6 +491,8 @@ model EmailLog {
   bouncedAt      DateTime?
   createdAt      DateTime       @default(now())
 
+  events EmailEvent[]
+
   campaign     Campaign      @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   campaignStep CampaignStep? @relation(fields: [campaignStepId], references: [id], onDelete: SetNull)
   lead         Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
@@ -456,6 +501,22 @@ model EmailLog {
   @@index([emailAccountId, sentAt]) // daily-limit checks
   @@index([campaignId, status, sentAt]) // analytics
   @@index([leadId])
+}
+
+// Raw open / click / unsubscribe hits, used for time-series analytics.
+model EmailEvent {
+  id         String         @id @default(uuid()) @db.Uuid
+  emailLogId String         @db.Uuid
+  type       EmailEventType
+  url        String?        @db.Text // clicked link
+  ip         String?
+  userAgent  String?        @db.Text
+  createdAt  DateTime       @default(now())
+
+  emailLog EmailLog @relation(fields: [emailLogId], references: [id], onDelete: Cascade)
+
+  @@index([emailLogId])
+  @@index([type, createdAt])
 }
 
 // =============================================================================
@@ -524,4 +585,58 @@ model WarmupLog {
 
   @@index([senderAccountId, sentAt])
   @@index([recipientAccountId, status])
+}
+
+// =============================================================================
+// 7. Integrations & Deliverability Tools
+// =============================================================================
+
+// Outbound webhooks (e.g. "lead.replied", "lead.interested", "email.bounced").
+model Webhook {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @db.Uuid
+  url         String
+  events      String[]
+  secretEnc   String    @db.Text // HMAC-SHA256 signing secret (encrypted)
+  isActive    Boolean   @default(true)
+  lastStatus  Int?
+  lastFiredAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, isActive])
+}
+
+// Public REST API keys. Only a SHA-256 hash is stored; the key is shown once.
+model ApiKey {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @db.Uuid
+  name        String
+  prefix      String // first chars shown in the UI, e.g. "mm_live_ab12"
+  keyHash     String    @unique
+  lastUsedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+}
+
+// Inbox placement test: send a seed email to seed inboxes on several providers
+// and record where it lands (inbox / spam / missing).
+model PlacementTest {
+  id             String              @id @default(uuid()) @db.Uuid
+  workspaceId    String              @db.Uuid
+  emailAccountId String              @db.Uuid
+  status         PlacementTestStatus @default(PENDING)
+  subject        String
+  results        Json? // [{ seed, provider, folder: "INBOX" | "SPAM" | "MISSING" }]
+  inboxRate      Float?
+  createdAt      DateTime            @default(now())
+  completedAt    DateTime?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
 }
