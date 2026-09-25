@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: mithmill
+          POSTGRES_PASSWORD: mithmill
+          POSTGRES_DB: mithmill
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U mithmill" --health-interval 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://mithmill:mithmill@localhost:5432/mithmill
+      DIRECT_URL: postgresql://mithmill:mithmill@localhost:5432/mithmill
+      AUTH_SECRET: ci-secret
+      ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prisma validate
+      - run: npx prisma migrate deploy
+      - name: Schema and migrations are in sync
+        run: npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build

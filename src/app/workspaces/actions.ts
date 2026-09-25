@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { slugify } from "@/lib/utils";
+import { PLANS } from "@/lib/plans";
 import { requireUser, WORKSPACE_COOKIE } from "@/server/workspace";
 
 async function setWorkspaceCookie(id: string) {
@@ -25,7 +26,14 @@ export async function createWorkspace(formData: FormData) {
   if (await db.workspace.findUnique({ where: { slug } })) slug = `${slug}-${Math.random().toString(36).slice(2, 7)}`;
 
   const ws = await db.workspace.create({
-    data: { name, slug, members: { create: { userId: user.id, role: "OWNER" } } },
+    data: {
+      name,
+      slug,
+      subscriptionTier: "FREE",
+      maxInboxes: PLANS.FREE.maxInboxes,
+      monthlyEmailQuota: PLANS.FREE.monthlyEmailQuota,
+      members: { create: { userId: user.id, role: "OWNER" } },
+    },
   });
   await setWorkspaceCookie(ws.id);
   redirect("/dashboard");

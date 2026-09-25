@@ -1,4 +1,4 @@
-import type { CampaignLead, EmailAccount, Lead, LeadEsp } from "@prisma/client";
+import { Prisma, type CampaignLead, type EmailAccount, type Lead, type LeadEsp } from "@prisma/client";
 import { db } from "@/lib/db";
 import { isWithinWindow, randomBetween } from "@/lib/schedule";
 import { getQueue, QUEUES, redis, type SendEmailJob } from "@/server/queue";
@@ -79,12 +79,28 @@ export async function runSchedulerTick(now = new Date()): Promise<{ queued: numb
   const pace = new Map(accountIds.map((id, i) => [id, Number(paceValues[i] ?? 0)]));
   const busy = new Set<string>(); // inboxes already given a send this tick
 
+  // Monthly plan quota per workspace (sent + in flight this calendar month, UTC).
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const workspaceIds = [...new Set(campaigns.map((c) => c.workspaceId))];
+  const [workspaces, monthUsage] = workspaceIds.length
+    ? await Promise.all([
+        db.workspace.findMany({ where: { id: { in: workspaceIds } }, select: { id: true, monthlyEmailQuota: true } }),
+        db.$queryRaw<{ workspaceId: string; n: number }[]>`
+          SELECT c."workspaceId", count(*)::int AS n FROM "EmailLog" l JOIN "Campaign" c ON c.id = l."campaignId"
+          WHERE c."workspaceId" IN (${Prisma.join(workspaceIds.map((id) => Prisma.sql`${id}::uuid`))})
+            AND (l."sentAt" >= ${monthStart} OR l.status = 'QUEUED')
+          GROUP BY 1`,
+      ])
+    : [[], []];
+  const quotaLeft = new Map(workspaces.map((w) => [w.id, w.monthlyEmailQuota - (monthUsage.find((u) => u.workspaceId === w.id)?.n ?? 0)]));
+
   let queued = 0;
   let completed = 0;
   const sendQueue = getQueue(QUEUES.sendEmail);
 
   for (const c of campaigns) {
     if (!c.schedule || !isWithinWindow(now, c.scheduleTimezone, c.schedule)) continue;
+    if ((quotaLeft.get(c.workspaceId) ?? 0) <= 0) continue;
     if (c.steps.length === 0) continue;
 
     const states: AccountState[] = c.emailAccounts
@@ -159,6 +175,7 @@ export async function runSchedulerTick(now = new Date()): Promise<{ queued: numb
     }
 
     for (const { cl, account } of picks) {
+      if ((quotaLeft.get(c.workspaceId) ?? 0) <= 0) break;
       const nextStep = c.steps.find((s) => s.stepNumber === cl.currentStepNumber + 1);
       if (!nextStep) {
         await db.campaignLead.update({ where: { id: cl.id }, data: { status: "FINISHED", nextSendAt: null } });
@@ -184,6 +201,7 @@ export async function runSchedulerTick(now = new Date()): Promise<{ queued: numb
       });
       await r.set(PACE_KEY(account.id), String(now.getTime() + jitterMs + gapMs), "PX", 24 * 3600 * 1000);
       busy.add(account.id);
+      quotaLeft.set(c.workspaceId, (quotaLeft.get(c.workspaceId) ?? 0) - 1);
       used.set(account.id, (used.get(account.id) ?? 0) + 1);
       queued++;
     }

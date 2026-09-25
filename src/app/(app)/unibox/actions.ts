@@ -14,8 +14,8 @@ import { emitEvent } from "@/server/services/webhooks";
 
 const LABELS = ["INTERESTED", "MEETING_BOOKED", "NOT_INTERESTED", "OUT_OF_OFFICE", "WRONG_PERSON", "UNSUBSCRIBE_REQUEST", "NEUTRAL"] as const;
 
-async function ownThread(id: string) {
-  const { workspace } = await requireWorkspace();
+async function ownThread(id: string, minRole: "VIEWER" | "ADMIN" = "VIEWER") {
+  const { workspace } = await requireWorkspace(minRole);
   const thread = await db.thread.findFirst({ where: { id, workspaceId: workspace.id }, include: { messages: { orderBy: { receivedAt: "asc" } } } });
   if (!thread) throw new Error("Thread not found");
   return { thread, workspace };
@@ -28,7 +28,7 @@ export async function markRead(id: string, isRead = true) {
 }
 
 export async function setLabel(id: string, label: ThreadSummaryStatus | null) {
-  const { thread, workspace } = await ownThread(id);
+  const { thread, workspace } = await ownThread(id, "ADMIN");
   const parsed = label === null ? null : z.enum(LABELS).parse(label);
   await db.thread.update({ where: { id }, data: { summaryStatus: parsed } });
   if (parsed && thread.leadId && thread.campaignId && parsed !== thread.summaryStatus) {
@@ -40,7 +40,7 @@ export async function setLabel(id: string, label: ThreadSummaryStatus | null) {
 }
 
 export async function sendReply(threadId: string, body: string): Promise<{ error?: string; ok?: boolean }> {
-  const { thread, workspace } = await ownThread(threadId);
+  const { thread, workspace } = await ownThread(threadId, "ADMIN");
   const text = z.string().trim().min(1).max(20000).safeParse(body);
   if (!text.success) return { error: "Write a message first." };
 
