@@ -141,8 +141,19 @@ export async function linkState(ws: Pick<Workspace, "salesblinkApiKeyEnc" | "sal
 export async function moveToOwnSalesblinkWorkspace(workspaceId: string) {
   const ws = await db.workspace.findUniqueOrThrow({ where: { id: workspaceId } });
   if (ws.salesblinkWorkspaceId) throw new LinkKeyError("This workspace already has its own SalesBlink workspace.");
-  const client = await platformClient();
-  if (!client) throw new LinkKeyError("No platform SalesBlink key is configured.");
+  let client = await platformClient();
+  if (!client) {
+    // This workspace is on the main SalesBlink workspace, so its key is the owner key:
+    // adopt it as the platform key (also lets future workspaces be created automatically).
+    if (!ws.salesblinkApiKeyEnc) throw new LinkKeyError("No platform SalesBlink key is configured.");
+    const ownerKey = decrypt(ws.salesblinkApiKeyEnc);
+    await db.platformSetting.upsert({
+      where: { key: OWNER_KEY_SETTING },
+      create: { key: OWNER_KEY_SETTING, valueEnc: encrypt(ownerKey) },
+      update: { valueEnc: encrypt(ownerKey) },
+    });
+    client = new SalesBlinkClient(ownerKey);
+  }
   const name = salesblinkWorkspaceName(ws.name);
   const res = await client.request<{ data: { id: string; name: string } }>("POST", "/workspaces", { json: { name } });
   const [removed] = await db.$transaction([

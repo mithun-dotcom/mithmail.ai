@@ -5,7 +5,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
-import { sha256 } from "@/lib/crypto";
+import { encrypt, sha256 } from "@/lib/crypto";
 import { redis } from "@/server/queue";
 import { clientFor } from "@/server/salesblink/service";
 import {
@@ -14,6 +14,7 @@ import {
   linkWorkspaceKey,
   linkMainSalesblinkWorkspace,
   moveToOwnSalesblinkWorkspace,
+  platformOwnerKey,
   renameSalesblinkWorkspace,
   salesblinkWorkspaceName,
 } from "@/server/salesblink/provisioning";
@@ -131,5 +132,20 @@ describe("SalesBlink workspace provisioning", () => {
     expect(await linkState(saved)).toBe("awaiting-key");
     expect(await db.emailAccount.count({ where: { workspaceId: d.id } })).toBe(0);
     await expect(moveToOwnSalesblinkWorkspace(d.id)).rejects.toThrow(/already has its own/);
+  });
+
+  it("adopts the workspace's main key as the platform key when none is configured", async () => {
+    const f = await newWorkspace(`Client F ${run}`);
+    await db.workspace.update({ where: { id: f.id }, data: { salesblinkApiKeyEnc: encrypt(OWNER), sendingEngine: "SALESBLINK" } });
+    delete process.env.SALESBLINK_API_KEY;
+    await db.platformSetting.deleteMany({ where: { key: "salesblink_owner_key" } });
+    try {
+      const r = await moveToOwnSalesblinkWorkspace(f.id);
+      expect(r.name).toBe(`Client F ${run}`);
+      expect(await platformOwnerKey()).toBe(OWNER);
+    } finally {
+      await db.platformSetting.deleteMany({ where: { key: "salesblink_owner_key" } });
+      process.env.SALESBLINK_API_KEY = OWNER;
+    }
   });
 });
