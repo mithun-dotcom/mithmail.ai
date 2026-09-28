@@ -9,6 +9,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { SmtpForm } from "./smtp-form";
 import { BulkImport } from "./bulk-import";
+import { ImportByEmail } from "./import-by-email";
 
 export default async function NewAccountPage() {
   const { workspace } = await requireWorkspace("ADMIN");
@@ -58,6 +59,15 @@ export default async function NewAccountPage() {
               </CardContent>
             </Card>
           </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Already connected in SalesBlink?</CardTitle>
+              <CardDescription>Inboxes sync automatically every few minutes. To bring one in right now, enter its address.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ImportByEmail />
+            </CardContent>
+          </Card>
           <Suspense fallback={null}>
             <AdminApprovalCard workspace={workspace} />
           </Suspense>

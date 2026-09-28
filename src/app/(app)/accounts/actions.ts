@@ -9,7 +9,7 @@ import { encrypt } from "@/lib/crypto";
 import { requireWorkspace } from "@/server/workspace";
 import { testConnection } from "@/server/mail/clients";
 import { refreshDomainHealth } from "@/server/services/domain-health";
-import { clientFor, pushSenderSettings, syncSenders } from "@/server/salesblink/service";
+import { clientFor, importSenderByEmail, pushSenderSettings, syncSenders } from "@/server/salesblink/service";
 import { getQueue, QUEUES } from "@/server/queue";
 
 export type ActionState = { ok?: boolean; error?: string; message?: string };
@@ -327,6 +327,21 @@ export async function checkNewSalesblinkInbox(baseline: string[]): Promise<{ acc
     const account = await db.emailAccount.findUnique({ where: { workspaceId_salesblinkSenderId: { workspaceId: workspace.id, salesblinkSenderId: fresh.id } } });
     revalidatePath("/accounts");
     return { accountId: account?.id, email: fresh.email };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+/** Pulls one inbox that's already connected in SalesBlink into MithMill, by its email address. */
+export async function importSalesblinkInbox(email: string): Promise<ActionState & { accountId?: string }> {
+  const { workspace } = await requireWorkspace("ADMIN");
+  const parsed = z.string().trim().email().safeParse(email);
+  if (!parsed.success) return { error: "Enter a valid email address." };
+  try {
+    const account = await importSenderByEmail(workspace.id, parsed.data);
+    if (!account) return { error: `${parsed.data} isn't in this workspace's SalesBlink workspace yet. Connect it first, then try again.` };
+    revalidatePath("/accounts");
+    return { ok: true, message: `Imported ${account.emailAddress}.`, accountId: account.id };
   } catch (e) {
     return { error: (e as Error).message };
   }

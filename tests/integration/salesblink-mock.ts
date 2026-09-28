@@ -27,6 +27,8 @@ export interface MockState {
   blocklist: string[];
   workspaces: { id: string; name: string }[];
   bulkUploads: string[];
+  /** Simulates an API that ignores `skip` and pages with `page` instead. */
+  pageParamOnly?: boolean;
 }
 
 async function readBody(req: IncomingMessage): Promise<unknown> {
@@ -112,7 +114,13 @@ export async function startSalesblinkMock(apiKey: string | string[]) {
       state.bulkUploads.push(String((body as Record<string, string>).csvFile ?? ""));
       return send(200, { success: true, message: "Senders queued" });
     }
-    if (m === "GET" && path === "/senders") return send(200, { success: true, data: state.senders.slice(Number(url.searchParams.get("skip") ?? 0)) });
+    if (m === "GET" && path === "/senders") {
+      const limit = Math.min(Number(url.searchParams.get("limit") ?? 100), 100);
+      const search = url.searchParams.get("search")?.toLowerCase();
+      const all = search ? state.senders.filter((x) => x.email.includes(search)) : state.senders;
+      const skip = state.pageParamOnly ? (Number(url.searchParams.get("page") ?? 1) - 1) * limit : Number(url.searchParams.get("skip") ?? 0);
+      return send(200, { success: true, data: all.slice(skip, skip + limit) });
+    }
     if (m === "GET" && (match = /^\/senders\/([^/]+)\/health$/.exec(path))) {
       const s = state.senders.find((x) => x.id === match![1]);
       return send(200, {

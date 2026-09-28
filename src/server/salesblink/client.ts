@@ -255,27 +255,48 @@ export class SalesBlinkClient {
 
   // ---- Senders ---------------------------------------------------------------
 
-  async listSenders(): Promise<SbSender[]> {
-    const out: SbSender[] = [];
+  /**
+   * All senders in the workspace. SalesBlink caps pages at 100; paging is by `skip`, but if a
+   * page comes back with nothing new (the offset was ignored) we retry that page with `page`
+   * and stop once neither yields new senders, so we never loop on the same 100.
+   */
+  async listSenders(opts: { search?: string } = {}): Promise<SbSender[]> {
+    const byId = new Map<string, SbSender>();
     const limit = 100;
-    for (let skip = 0; skip < 10_000; skip += limit) {
-      const res = await this.request<unknown>("GET", "/senders", { query: { limit, skip } });
+    const fetchPage = async (query: Record<string, string | number>) => {
+      const res = await this.request<unknown>("GET", "/senders", { query: { limit, ...(opts.search ? { search: opts.search } : {}), ...query } });
       const page = extractList(res);
       let dropped = 0;
+      let added = 0;
       for (const raw of page) {
         const s = normalizeSender(raw);
-        if (s) out.push(s);
-        else dropped++;
+        if (!s) dropped++;
+        else if (!byId.has(s.id)) {
+          byId.set(s.id, s);
+          added++;
+        }
       }
-      if (dropped || (skip === 0 && !page.length)) {
+      if (dropped || (!byId.size && !page.length && !opts.search)) {
         // Shape diagnostics only (field names and value types, never values).
         const shape = (o: unknown) =>
           o && typeof o === "object" ? Object.fromEntries(Object.entries(o as object).map(([k, v]) => [k, Array.isArray(v) ? `array(${v.length})` : typeof v])) : typeof o;
         console.warn(JSON.stringify({ msg: "salesblink /senders shape", dropped, pageSize: page.length, envelope: shape(res), firstItem: shape(page[0]) }));
       }
-      if (page.length < limit) break;
+      return { size: page.length, added };
+    };
+    for (let n = 0; n < 100; n++) {
+      let { size, added } = await fetchPage({ skip: n * limit });
+      if (n > 0 && size > 0 && added === 0) ({ size, added } = await fetchPage({ page: n + 1 }));
+      if (size < limit || added === 0) break;
     }
-    return out;
+    return [...byId.values()];
+  }
+
+  /** Looks a sender up by email (SalesBlink's `search` filter), without paging the whole list. */
+  async findSenderByEmail(email: string): Promise<SbSender | null> {
+    const want = email.trim().toLowerCase();
+    const hits = await this.listSenders({ search: want });
+    return hits.find((s) => s.email === want) ?? null;
   }
 
   senderHealth(id: string) {

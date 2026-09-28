@@ -16,7 +16,7 @@ import { classifyReply } from "@/server/ai";
 import { emitEvent } from "@/server/services/webhooks";
 import { enrollSubsequences, stripQuoted } from "@/server/inbox/reply-processor";
 import { htmlToText } from "@/lib/template";
-import { SalesBlinkClient, type SbActivity, type SbSendingHour } from "./client";
+import { SalesBlinkClient, type SbActivity, type SbSender, type SbSendingHour } from "./client";
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const CONTACT_BATCH = 500;
@@ -65,25 +65,7 @@ export async function syncSenders(workspaceId: string, opts: { healthBudget?: nu
 
   for (const s of senders) {
     seen.add(s.id);
-    const existing =
-      (await db.emailAccount.findUnique({ where: { workspaceId_salesblinkSenderId: { workspaceId: ws.id, salesblinkSenderId: s.id } } })) ??
-      (await db.emailAccount.findUnique({ where: { workspaceId_emailAddress: { workspaceId: ws.id, emailAddress: s.email } } }));
-    if (existing) {
-      await db.emailAccount.update({
-        where: { id: existing.id },
-        data: { salesblinkSenderId: s.id, fromName: existing.fromName ?? s.name ?? null },
-      });
-    } else {
-      await db.emailAccount.create({
-        data: {
-          workspaceId: ws.id,
-          emailAddress: s.email,
-          fromName: s.name ?? null,
-          provider: providerOf(s.provider, s.email),
-          salesblinkSenderId: s.id,
-        },
-      });
-    }
+    await upsertSender(ws.id, s);
   }
 
   // Senders removed in SalesBlink.
@@ -100,6 +82,31 @@ export async function syncSenders(workspaceId: string, opts: { healthBudget?: nu
   });
   for (const a of stale) await refreshSenderHealth(client, a);
   return { senders: senders.length, healthRefreshed: stale.length };
+}
+
+async function upsertSender(workspaceId: string, s: SbSender) {
+  const existing =
+    (await db.emailAccount.findUnique({ where: { workspaceId_salesblinkSenderId: { workspaceId, salesblinkSenderId: s.id } } })) ??
+    (await db.emailAccount.findUnique({ where: { workspaceId_emailAddress: { workspaceId, emailAddress: s.email } } }));
+  if (existing) {
+    return db.emailAccount.update({
+      where: { id: existing.id },
+      data: { salesblinkSenderId: s.id, fromName: existing.fromName ?? s.name ?? null, ...(existing.status === "DISCONNECTED" ? { status: "ACTIVE", lastError: null } : {}) },
+    });
+  }
+  return db.emailAccount.create({
+    data: { workspaceId, emailAddress: s.email, fromName: s.name ?? null, provider: providerOf(s.provider, s.email), salesblinkSenderId: s.id },
+  });
+}
+
+/** Imports one sender by email (SalesBlink search), e.g. right after it was connected. */
+export async function importSenderByEmail(workspaceId: string, email: string) {
+  const { ws, client } = await workspaceClient(workspaceId);
+  const sender = await client.findSenderByEmail(email);
+  if (!sender) return null;
+  const account = await upsertSender(ws.id, sender);
+  await refreshSenderHealth(client, account);
+  return account;
 }
 
 export async function refreshSenderHealth(client: SalesBlinkClient, account: EmailAccount) {

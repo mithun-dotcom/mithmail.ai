@@ -182,3 +182,29 @@ describe("SalesBlink engine", () => {
     expect(mock.state.sequences.get(c.sbSequenceId!)!.status).toBe("PAUSED");
   });
 });
+
+describe("SalesBlink sender paging", () => {
+  it("pages past 100 senders, copes with an ignored skip, and finds a sender by email", async () => {
+    const saved = [...mock.state.senders];
+    try {
+      for (let i = 0; i < 148; i++) mock.state.senders.push({ id: `snd_bulk_${i}`, email: `bulk${i}@paging.io`, from_name: "Bulk" });
+      mock.state.senders.push({ id: "snd_late", email: "late@montage.io", from_name: "Late" });
+      const client = new (await import("@/server/salesblink/client")).SalesBlinkClient(KEY);
+
+      const all = await client.listSenders();
+      expect(all).toHaveLength(151);
+      expect(all.some((s) => s.id === "snd_late")).toBe(true);
+
+      mock.state.pageParamOnly = true;
+      const viaPage = await client.listSenders();
+      expect(viaPage).toHaveLength(151);
+      mock.state.pageParamOnly = false;
+
+      expect((await client.findSenderByEmail("LATE@montage.io"))?.id).toBe("snd_late");
+      expect(await client.findSenderByEmail("nobody@montage.io")).toBeNull();
+    } finally {
+      mock.state.senders = saved;
+      mock.state.pageParamOnly = false;
+    }
+  });
+});
