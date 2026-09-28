@@ -302,3 +302,32 @@ export async function deleteAccount(id: string) {
   revalidatePath("/accounts");
   redirect("/accounts");
 }
+
+/** Snapshot of SalesBlink sender ids, taken when the user starts a Google / Outlook sign-in. */
+export async function salesblinkSenderBaseline(): Promise<string[]> {
+  const { workspace } = await requireWorkspace("ADMIN");
+  try {
+    return (await clientFor(workspace).listSenders()).map((s) => s.id);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Polled by the Connect Google / Outlook popup flow: one GET /senders per call. A sender that
+ * wasn't in the baseline is the one just connected — import it and return its account id.
+ */
+export async function checkNewSalesblinkInbox(baseline: string[]): Promise<{ accountId?: string; email?: string; error?: string }> {
+  const { workspace } = await requireWorkspace("ADMIN");
+  try {
+    const before = new Set(baseline);
+    const fresh = (await clientFor(workspace).listSenders()).find((s) => !before.has(s.id));
+    if (!fresh) return {};
+    await syncSenders(workspace.id, { healthBudget: 3 });
+    const account = await db.emailAccount.findUnique({ where: { workspaceId_salesblinkSenderId: { workspaceId: workspace.id, salesblinkSenderId: fresh.id } } });
+    revalidatePath("/accounts");
+    return { accountId: account?.id, email: fresh.email };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}

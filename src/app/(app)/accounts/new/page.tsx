@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { AdminApprovalCard } from "./admin-approval";
+import { OAuthConnectButton } from "./oauth-connect";
 import { requireWorkspace } from "@/server/workspace";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -44,9 +45,7 @@ export default async function NewAccountPage() {
                 <CardDescription>Sign in with Google. The inbox is added to this workspace&apos;s SalesBlink workspace and shows up here within a few minutes.</CardDescription>
               </CardHeader>
               <CardContent>
-                <a href="/api/salesblink/oauth/google" target="_blank" rel="noopener" className={buttonVariants({ variant: "gold" })}>
-                  Connect Google ↗
-                </a>
+                <OAuthConnectButton provider="google" label="Connect Google" />
               </CardContent>
             </Card>
             <Card>
@@ -55,9 +54,7 @@ export default async function NewAccountPage() {
                 <CardDescription>Sign in with Microsoft. Added to this workspace&apos;s SalesBlink workspace.</CardDescription>
               </CardHeader>
               <CardContent>
-                <a href="/api/salesblink/oauth/outlook" target="_blank" rel="noopener" className={buttonVariants({ variant: "gold" })}>
-                  Connect Outlook ↗
-                </a>
+                <OAuthConnectButton provider="outlook" label="Connect Outlook" />
               </CardContent>
             </Card>
           </div>

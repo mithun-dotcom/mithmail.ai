@@ -9,8 +9,9 @@ import { DnsHealthCard } from "@/components/dns-health-card";
 import { SettingsForm } from "./settings-form";
 import { AccountActions } from "./account-actions";
 
-export default async function AccountPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function AccountPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ connected?: string }> }) {
   const { id } = await params;
+  const { connected } = await searchParams;
   const { workspace } = await requireWorkspace();
   const account = await db.emailAccount.findFirst({
     where: { id, workspaceId: workspace.id },
@@ -32,6 +33,7 @@ export default async function AccountPage({ params }: { params: Promise<{ id: st
   return (
     <>
       <PageHeader title={account.emailAddress} description={`${account.provider.toLowerCase()} · added ${account.createdAt.toDateString()}`} actions={<StatusBadge status={account.status} />} />
+      {connected && <p className="mb-4 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">✅ Connected! {account.emailAddress} is now in this workspace and SalesBlink.</p>}
       {account.lastError && <p className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{account.lastError}</p>}
       {account.salesblinkSenderId && (
         <p className="mb-4 rounded-md bg-royal-50 px-3 py-2 text-sm text-royal-900">

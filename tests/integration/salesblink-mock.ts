@@ -79,6 +79,12 @@ export async function startSalesblinkMock(apiKey: string | string[]) {
       res.writeHead(status, { "content-type": "application/json" });
       res.end(JSON.stringify(json));
     };
+    // Test hook: simulate a user finishing OAuth (a new sender appears).
+    if (req.method === "POST" && path === "/__test/add-sender") {
+      const b = body as { id: string; email: string };
+      state.senders.push({ id: b.id, email: b.email, from_name: b.email.split("@")[0] });
+      return send(200, { success: true });
+    }
     if (!keys.has(req.headers.authorization ?? "")) return send(401, { success: false, message: "Invalid API key" });
 
     const m = req.method;
