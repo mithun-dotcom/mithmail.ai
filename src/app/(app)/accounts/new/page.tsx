@@ -46,6 +46,11 @@ export default async function NewAccountPage() {
   return (
     <>
       <PageHeader title="Connect inboxes" description="Add as many inboxes as you like — volume is spread across all of them." />
+      <p className="mb-6 rounded-md bg-royal-50 px-3 py-2 text-sm text-royal-900">
+        Sending through <b>SalesBlink</b>? Switch the engine in{" "}
+        <Link href="/settings" className="font-medium underline">Settings → Sending engine</Link>. Inboxes are then connected on SalesBlink&apos;s page and
+        synced here, with no Google/Microsoft app keys needed.
+      </p>
       <div className="grid gap-6">
         <div className="grid gap-4 md:grid-cols-2">
           <Card>
