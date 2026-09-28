@@ -120,11 +120,53 @@ function str(o: Record<string, unknown>, ...keys: string[]): string | undefined 
   return undefined;
 }
 
+const EMAIL_RX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function idOf(o: Record<string, unknown>, ...keys: string[]): string | undefined {
+  for (const k of keys) {
+    const v = o[k];
+    if ((typeof v === "string" && v) || typeof v === "number") return String(v);
+  }
+  return undefined;
+}
+
+/** First email-looking string: preferred keys first, then any field (one level deep). */
+function emailOf(o: Record<string, unknown>): string | undefined {
+  const preferred = str(o, "email", "from_email", "fromEmail", "email_address", "emailAddress", "sender_email", "user_name", "username", "user");
+  if (preferred && EMAIL_RX.test(preferred)) return preferred;
+  for (const v of Object.values(o)) {
+    if (typeof v === "string" && EMAIL_RX.test(v)) return v;
+  }
+  for (const v of Object.values(o)) {
+    if (v && typeof v === "object" && !Array.isArray(v)) {
+      const inner = emailOf(v as Record<string, unknown>);
+      if (inner) return inner;
+    }
+  }
+  return undefined;
+}
+
 export function normalizeSender(raw: Record<string, unknown>): SbSender | null {
-  const id = str(raw, "id", "_id", "sender_id", "uuid");
-  const email = str(raw, "email", "from_email", "fromEmail", "user_name", "username", "user")?.toLowerCase();
-  if (!id || !email || !email.includes("@")) return null;
-  return { id, email, name: str(raw, "from_name", "fromName", "name"), provider: str(raw, "provider", "type", "service", "email_type"), raw };
+  const id = idOf(raw, "id", "_id", "sender_id", "senderId", "uuid");
+  const email = emailOf(raw)?.toLowerCase();
+  if (!id || !email) return null;
+  return { id, email, name: str(raw, "from_name", "fromName", "name", "sender_name"), provider: str(raw, "provider", "type", "service", "email_type", "account_type"), raw };
+}
+
+/** Pulls the list out of whatever envelope SalesBlink used ({data: [...]}, {data: {senders: [...]}}, [...], …). */
+export function extractList(res: unknown): Record<string, unknown>[] {
+  if (Array.isArray(res)) return res as Record<string, unknown>[];
+  if (!res || typeof res !== "object") return [];
+  const o = res as Record<string, unknown>;
+  for (const k of ["data", "senders", "result", "results", "items", "docs", "rows"]) {
+    const v = o[k];
+    if (Array.isArray(v)) return v as Record<string, unknown>[];
+    if (v && typeof v === "object") {
+      const inner = extractList(v);
+      if (inner.length) return inner;
+    }
+  }
+  return [];
 }
 
 export class SalesBlinkClient {
@@ -217,11 +259,19 @@ export class SalesBlinkClient {
     const out: SbSender[] = [];
     const limit = 100;
     for (let skip = 0; skip < 10_000; skip += limit) {
-      const res = await this.request<{ data?: Record<string, unknown>[] }>("GET", "/senders", { query: { limit, skip } });
-      const page = res.data ?? [];
+      const res = await this.request<unknown>("GET", "/senders", { query: { limit, skip } });
+      const page = extractList(res);
+      let dropped = 0;
       for (const raw of page) {
         const s = normalizeSender(raw);
         if (s) out.push(s);
+        else dropped++;
+      }
+      if (dropped || (skip === 0 && !page.length)) {
+        // Shape diagnostics only (field names and value types, never values).
+        const shape = (o: unknown) =>
+          o && typeof o === "object" ? Object.fromEntries(Object.entries(o as object).map(([k, v]) => [k, Array.isArray(v) ? `array(${v.length})` : typeof v])) : typeof o;
+        console.warn(JSON.stringify({ msg: "salesblink /senders shape", dropped, pageSize: page.length, envelope: shape(res), firstItem: shape(page[0]) }));
       }
       if (page.length < limit) break;
     }

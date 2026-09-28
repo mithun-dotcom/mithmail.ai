@@ -511,8 +511,8 @@ export async function syncWorkspace(workspaceId: string) {
   const initial = now - 7 * 86_400_000;
   const result: Record<string, number> = {};
 
-  // Slow cycle (every 30 min): senders + health, and bounce/unsubscribe status per campaign.
-  const slow = !state.sendersAt || now - state.sendersAt > 30 * 60_000;
+  // Slow cycle (every 10 min): senders + health, and bounce/unsubscribe status per campaign.
+  const slow = !state.sendersAt || now - state.sendersAt > 10 * 60_000;
   if (slow) {
     const r = await syncSenders(workspaceId);
     result.senders = r.senders;

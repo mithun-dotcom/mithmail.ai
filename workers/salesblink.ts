@@ -27,8 +27,11 @@ export function startSalesblinkWorker() {
           if (Object.values(res).some((n) => n > 0)) logger.info("salesblink sync", { workspace: d.workspaceId, ...res });
           return res;
         }
-        case "sync-senders":
-          return syncSenders(d.workspaceId, { healthBudget: 25 });
+        case "sync-senders": {
+          const res = await syncSenders(d.workspaceId, { healthBudget: 25 });
+          logger.info("salesblink senders", { workspace: d.workspaceId, ...res });
+          return res;
+        }
         case "launch":
           await launchOnSalesblink(d.campaignId);
           logger.info("salesblink launch", { campaign: d.campaignId });

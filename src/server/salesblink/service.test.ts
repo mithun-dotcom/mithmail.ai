@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Lead } from "@prisma/client";
 import { renderLeadFields, sendingHours } from "./service";
-import { normalizeSender } from "./client";
+import { extractList, normalizeSender } from "./client";
 
 const lead = {
   id: "lead-1",
@@ -62,5 +62,20 @@ describe("normalizeSender", () => {
   it("rejects objects without id or email", () => {
     expect(normalizeSender({ email: "a@b.com" })).toBeNull();
     expect(normalizeSender({ id: "1", email: "nope" })).toBeNull();
+  });
+});
+
+describe("tolerant sender parsing", () => {
+  it("finds the list in different envelopes", () => {
+    const item = { sender_id: "s1", email: "a@b.io" };
+    expect(extractList({ success: true, data: [item] })).toEqual([item]);
+    expect(extractList({ data: { senders: [item] } })).toEqual([item]);
+    expect(extractList([item])).toEqual([item]);
+    expect(extractList({ success: true })).toEqual([]);
+  });
+  it("reads ids from sender_id / numbers and emails from nested fields", () => {
+    expect(normalizeSender({ sender_id: "4b58f0b7", email: "sam@montagemotionhub.co" })).toMatchObject({ id: "4b58f0b7", email: "sam@montagemotionhub.co" });
+    expect(normalizeSender({ _id: 42, smtp: { user: "X@Y.io" } })).toMatchObject({ id: "42", email: "x@y.io" });
+    expect(normalizeSender({ id: "1", label: "Main", owner: "notanemail" })).toBeNull();
   });
 });

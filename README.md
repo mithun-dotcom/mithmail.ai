@@ -55,7 +55,7 @@ MithMill can use **SalesBlink** for sending, warm-up and inbox monitoring. MithM
 
 | MithMill | SalesBlink |
 |---|---|
-| Email accounts | Senders are synced every 30 min (health score, warm-up state). New inboxes are connected on SalesBlink's page (Google/Outlook) or through the SMTP form, which calls `add-sender` |
+| Email accounts | Senders are synced every 10 min (health score, warm-up state). New inboxes are connected on SalesBlink's page (Google/Outlook) or through the SMTP form, which calls `add-sender` |
 | Inbox settings / Warm-up page | Daily limit, warm-up on/off, ramp-up and max are pushed with `PATCH /senders/{id}` |
 | Campaign launch | Creates a list, pushes the leads, creates one template per step and the sequence (schedule, timezone, random delay, stop-on-reply, provider matching), then starts it |
 | Personalisation | SalesBlink templates only support plain merge tags. MithMill renders each lead's emails itself (spintax, `{{var\|fallback}}`, A/B variants, AI icebreakers) and sends them as the contact fields `mm_subject_N` / `mm_body_N`. The templates are just `{{mm_subject_N}}` / `{{mm_body_N}}` |
