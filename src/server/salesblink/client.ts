@@ -276,7 +276,7 @@ export class SalesBlinkClient {
           added++;
         }
       }
-      if (dropped || (!byId.size && !page.length && !opts.search)) {
+      if (dropped) {
         // Shape diagnostics only (field names and value types, never values).
         const shape = (o: unknown) =>
           o && typeof o === "object" ? Object.fromEntries(Object.entries(o as object).map(([k, v]) => [k, Array.isArray(v) ? `array(${v.length})` : typeof v])) : typeof o;
