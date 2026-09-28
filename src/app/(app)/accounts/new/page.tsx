@@ -13,22 +13,52 @@ export default async function NewAccountPage() {
   const googleReady = !!process.env.AUTH_GOOGLE_ID;
   const msReady = !!process.env.AUTH_MICROSOFT_ENTRA_ID_ID;
 
+  if (sb && !workspace.salesblinkApiKeyEnc) {
+    return (
+      <>
+        <PageHeader title="Connect inboxes" description="This workspace sends through SalesBlink." />
+        <Card>
+          <CardHeader>
+            <CardTitle>Finish SalesBlink setup first</CardTitle>
+            <CardDescription>Link this workspace to its SalesBlink workspace, then connect inboxes here.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link href="/settings" className={buttonVariants()}>Go to Settings → SalesBlink</Link>
+          </CardContent>
+        </Card>
+      </>
+    );
+  }
+
   if (sb) {
     return (
       <>
         <PageHeader title="Connect inboxes" description="Your workspace sends through SalesBlink, so inboxes are connected there and synced into MithMill." />
         <div className="grid gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Google, Microsoft or any SMTP inbox</CardTitle>
-              <CardDescription>Opens SalesBlink&apos;s secure connection page. Connected inboxes appear here automatically (or click Sync on the Email accounts page).</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <a href="/api/salesblink/connect" target="_blank" rel="noopener" className={buttonVariants({ variant: "gold" })}>
-                Connect in SalesBlink ↗
-              </a>
-            </CardContent>
-          </Card>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Google Workspace / Gmail</CardTitle>
+                <CardDescription>Sign in with Google. The inbox is added to this workspace&apos;s SalesBlink workspace and shows up here within a few minutes.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <a href="/api/salesblink/oauth/google" target="_blank" rel="noopener" className={buttonVariants({ variant: "gold" })}>
+                  Connect Google ↗
+                </a>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Microsoft 365 / Outlook</CardTitle>
+                <CardDescription>Sign in with Microsoft. Added to this workspace&apos;s SalesBlink workspace.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <a href="/api/salesblink/oauth/outlook" target="_blank" rel="noopener" className={buttonVariants({ variant: "gold" })}>
+                  Connect Outlook ↗
+                </a>
+              </CardContent>
+            </Card>
+          </div>
           <Card>
             <CardHeader>
               <CardTitle>SMTP / IMAP</CardTitle>
@@ -38,6 +68,18 @@ export default async function NewAccountPage() {
               <SmtpForm />
             </CardContent>
           </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Bulk import (CSV)</CardTitle>
+              <CardDescription>Upload many SMTP inboxes at once. They are added to this workspace&apos;s SalesBlink workspace.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <BulkImport />
+            </CardContent>
+          </Card>
+          <p className="text-xs text-muted-foreground">
+            Workspace in SalesBlink: <b>{workspace.salesblinkWorkspaceName ?? "linked"}</b>.
+          </p>
         </div>
       </>
     );

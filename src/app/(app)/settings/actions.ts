@@ -12,7 +12,9 @@ export type Result = { ok?: boolean; error?: string; message?: string; secret?: 
 export async function renameWorkspace(formData: FormData) {
   const { workspace } = await requireWorkspace("ADMIN");
   const name = z.string().trim().min(2).max(60).parse(formData.get("name"));
-  await db.workspace.update({ where: { id: workspace.id }, data: { name } });
+  const updated = await db.workspace.update({ where: { id: workspace.id }, data: { name } });
+  const { renameSalesblinkWorkspace } = await import("@/server/salesblink/provisioning");
+  await renameSalesblinkWorkspace(updated).catch(() => undefined);
   revalidatePath("/", "layout");
 }
 
@@ -125,48 +127,74 @@ export async function toggleWebhook(id: string, isActive: boolean) {
   revalidatePath("/settings");
 }
 
-// ---- Sending engine (SalesBlink) --------------------------------------------
+// ---- SalesBlink: one SalesBlink workspace per MithMill workspace -------------
 
-export async function saveSendingEngine(_: Result, formData: FormData): Promise<Result> {
+export async function createSalesblinkWorkspaceAction(): Promise<Result> {
   const { workspace } = await requireWorkspace("OWNER");
-  const engine = z.enum(["BUILTIN", "SALESBLINK"]).parse(formData.get("engine"));
-  const newKey = String(formData.get("apiKey") ?? "").trim();
-
-  const data: { sendingEngine: "BUILTIN" | "SALESBLINK"; salesblinkApiKeyEnc?: string } = { sendingEngine: engine };
-
-  if (engine === "SALESBLINK") {
-    const { SalesBlinkClient } = await import("@/server/salesblink/client");
-    const { salesblinkKey } = await import("@/server/salesblink/service");
-    const key = newKey || salesblinkKey(workspace);
-    if (!key) return { error: "Enter your SalesBlink API key (run.salesblink.io → Account → Integration → API)." };
-    try {
-      await new SalesBlinkClient(key).verify();
-    } catch (e) {
-      return { error: `SalesBlink rejected the key: ${(e as Error).message}` };
-    }
-    // Only a verified key is stored.
-    if (newKey) data.salesblinkApiKeyEnc = encrypt(newKey);
+  const { createSalesblinkWorkspace } = await import("@/server/salesblink/provisioning");
+  try {
+    const res = await createSalesblinkWorkspace(workspace.id);
+    if (!res) return { error: "No platform SalesBlink key is configured yet." };
+    revalidatePath("/settings");
+    return { ok: true, message: `Created SalesBlink workspace "${res.name}". Now create an API key inside it (step 2).` };
+  } catch (e) {
+    return { error: `SalesBlink: ${(e as Error).message}` };
   }
-  await db.workspace.update({ where: { id: workspace.id }, data });
-  if (engine === "SALESBLINK") {
-    const { getQueue, QUEUES } = await import("@/server/queue");
-    await getQueue(QUEUES.salesblink).add("sync-senders", { kind: "sync-senders", workspaceId: workspace.id }, { attempts: 2 });
+}
+
+export async function linkSalesblinkKeyAction(_: Result, formData: FormData): Promise<Result> {
+  const { workspace } = await requireWorkspace("OWNER");
+  const { linkWorkspaceKey, LinkKeyError } = await import("@/server/salesblink/provisioning");
+  try {
+    await linkWorkspaceKey(workspace.id, String(formData.get("apiKey") ?? ""));
+  } catch (e) {
+    return { error: e instanceof LinkKeyError ? e.message : `Could not link: ${(e as Error).message}` };
   }
   revalidatePath("/", "layout");
-  return {
-    ok: true,
-    message:
-      engine === "SALESBLINK"
-        ? "SalesBlink connected. Your SalesBlink inboxes are being imported; new campaigns will send through SalesBlink."
-        : "Using MithMill's built-in engine for new campaigns.",
-  };
+  return { ok: true, message: "Linked. This workspace now sends through its SalesBlink workspace — its inboxes are being imported." };
+}
+
+export async function useMainSalesblinkWorkspaceAction(): Promise<Result> {
+  const { workspace } = await requireWorkspace("OWNER");
+  const { linkMainSalesblinkWorkspace, LinkKeyError } = await import("@/server/salesblink/provisioning");
+  try {
+    await linkMainSalesblinkWorkspace(workspace.id);
+  } catch (e) {
+    return { error: e instanceof LinkKeyError ? e.message : (e as Error).message };
+  }
+  revalidatePath("/", "layout");
+  return { ok: true, message: "Linked to your main SalesBlink workspace." };
+}
+
+export async function unlinkSalesblinkAction(): Promise<Result> {
+  const { workspace } = await requireWorkspace("OWNER");
+  const { unlinkWorkspace } = await import("@/server/salesblink/provisioning");
+  await unlinkWorkspace(workspace.id);
+  revalidatePath("/", "layout");
+  return { ok: true, message: "Unlinked. New campaigns use the built-in engine; campaigns already on SalesBlink stop syncing." };
+}
+
+export async function savePlatformKeyAction(_: Result, formData: FormData): Promise<Result> {
+  const { user } = await requireWorkspace("OWNER");
+  const me = await db.user.findUniqueOrThrow({ where: { id: user.id } });
+  if (me.role !== "SUPER_ADMIN") return { error: "Only the platform admin can set the SalesBlink owner key." };
+  const key = String(formData.get("ownerKey") ?? "").trim();
+  if (!key) return { error: "Paste your SalesBlink owner API key." };
+  const { savePlatformOwnerKey } = await import("@/server/salesblink/provisioning");
+  try {
+    await savePlatformOwnerKey(key);
+  } catch (e) {
+    return { error: `SalesBlink rejected the key: ${(e as Error).message}` };
+  }
+  revalidatePath("/settings");
+  return { ok: true, message: "Saved. New MithMill workspaces now get their own SalesBlink workspace automatically." };
 }
 
 export async function syncSalesblinkNow(): Promise<Result> {
   const { workspace } = await requireWorkspace("ADMIN");
-  if (workspace.sendingEngine !== "SALESBLINK") return { error: "SalesBlink is not the sending engine for this workspace." };
+  if (!workspace.salesblinkApiKeyEnc) return { error: "Link this workspace to SalesBlink first." };
   const { getQueue, QUEUES } = await import("@/server/queue");
-  await getQueue(QUEUES.salesblink).add("sync", { kind: "sync", workspaceId: workspace.id }, { jobId: `sb-sync-manual-${workspace.id}-${Math.floor(Date.now() / 60_000)}` });
   await db.workspace.update({ where: { id: workspace.id }, data: { salesblinkSyncState: { ...((workspace.salesblinkSyncState as object) ?? {}), sendersAt: 0 } } });
-  return { ok: true, message: "Sync started — inboxes, activity and replies will refresh in a minute." };
+  await getQueue(QUEUES.salesblink).add("sync", { kind: "sync", workspaceId: workspace.id }, { jobId: `sb-sync-manual-${workspace.id}-${Math.floor(Date.now() / 60_000)}` });
+  return { ok: true, message: "Sync started — inboxes, activity and replies refresh in a minute." };
 }

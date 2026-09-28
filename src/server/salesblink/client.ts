@@ -244,6 +244,13 @@ export class SalesBlinkClient {
     return this.request<{ success: boolean; message?: string }>("POST", "/senders/add-sender", { json: input });
   }
 
+  /** CSV columns: from_email,password,smtp_host,smtp_port[,from_name,user_name,imap_host,imap_port,…] */
+  addBulkSenders(csv: string) {
+    const form = new FormData();
+    form.set("csvFile", new Blob([csv], { type: "text/csv" }), "senders.csv");
+    return this.request<{ success: boolean; message?: string }>("POST", "/senders/add-bulk-senders", { form });
+  }
+
   reconnectSender(id: string) {
     return this.request("POST", `/senders/${encodeURIComponent(id)}/reconnect`);
   }

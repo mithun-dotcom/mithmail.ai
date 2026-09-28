@@ -35,6 +35,13 @@ export async function createWorkspace(formData: FormData) {
       members: { create: { userId: user.id, role: "OWNER" } },
     },
   });
+  // Mirror it as its own SalesBlink workspace (when a platform SalesBlink key is configured).
+  try {
+    const { createSalesblinkWorkspace } = await import("@/server/salesblink/provisioning");
+    await createSalesblinkWorkspace(ws.id);
+  } catch (e) {
+    console.error("SalesBlink workspace creation failed", (e as Error).message); // retry from Settings
+  }
   await setWorkspaceCookie(ws.id);
   redirect("/dashboard");
 }

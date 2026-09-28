@@ -25,6 +25,8 @@ export interface MockState {
   mailUpdates: { messageId: string; patch: unknown }[];
   senderPatches: { id: string; patch: unknown }[];
   blocklist: string[];
+  workspaces: { id: string; name: string }[];
+  bulkUploads: string[];
 }
 
 async function readBody(req: IncomingMessage): Promise<unknown> {
@@ -46,7 +48,8 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
   return raw;
 }
 
-export async function startSalesblinkMock(apiKey: string) {
+export async function startSalesblinkMock(apiKey: string | string[]) {
+  const keys = new Set(Array.isArray(apiKey) ? apiKey : [apiKey]);
   const calls: MockCall[] = [];
   const state: MockState = {
     senders: [
@@ -63,6 +66,8 @@ export async function startSalesblinkMock(apiKey: string) {
     mailUpdates: [],
     senderPatches: [],
     blocklist: [],
+    workspaces: [],
+    bulkUploads: [],
   };
 
   const server: Server = createServer(async (req, res) => {
@@ -74,11 +79,33 @@ export async function startSalesblinkMock(apiKey: string) {
       res.writeHead(status, { "content-type": "application/json" });
       res.end(JSON.stringify(json));
     };
-    if (req.headers.authorization !== apiKey) return send(401, { success: false, message: "Invalid API key" });
+    if (!keys.has(req.headers.authorization ?? "")) return send(401, { success: false, message: "Invalid API key" });
 
     const m = req.method;
     let match: RegExpExecArray | null;
     if (m === "GET" && path === "/account/verify") return send(200, { success: true, message: "API key is valid" });
+    if (m === "POST" && path === "/workspaces") {
+      const name = (body as { name: string }).name;
+      if (!name || name.length < 4) return send(400, { success: false, message: "Name must be at least 4 characters" });
+      const ws = { id: `ws_${randomUUID().slice(0, 8)}`, name };
+      state.workspaces.push(ws);
+      return send(200, { success: true, data: ws });
+    }
+    if (m === "PATCH" && (match = /^\/workspaces\/([^/]+)$/.exec(path))) {
+      const ws = state.workspaces.find((w) => w.id === match![1]);
+      if (ws) ws.name = (body as { name: string }).name;
+      return send(200, { success: true, message: "Updated" });
+    }
+    if (m === "GET" && path === "/keys/create-link") {
+      return send(200, { success: true, data: { login_link: "https://run.salesblink.io/magic?token=abc", destination: "/account/integration/api", purpose: "api-keys" } });
+    }
+    if (m === "POST" && (match = /^\/oauth\/(google|outlook)$/.exec(path))) {
+      return send(200, { success: true, data: { auth_url: `https://accounts.example/${match[1]}/authorize?state=xyz` } });
+    }
+    if (m === "POST" && path === "/senders/add-bulk-senders") {
+      state.bulkUploads.push(String((body as Record<string, string>).csvFile ?? ""));
+      return send(200, { success: true, message: "Senders queued" });
+    }
     if (m === "GET" && path === "/senders") return send(200, { success: true, data: state.senders.slice(Number(url.searchParams.get("skip") ?? 0)) });
     if (m === "GET" && (match = /^\/senders\/([^/]+)\/health$/.exec(path))) {
       const s = state.senders.find((x) => x.id === match![1]);

@@ -6,7 +6,7 @@ import { logger } from "./logger";
 
 /** Every workspace running on the SalesBlink engine gets a sync job (de-duplicated per 5-minute slot). */
 export async function enqueueSalesblinkSyncs() {
-  const workspaces = await db.workspace.findMany({ where: { sendingEngine: "SALESBLINK" }, select: { id: true } });
+  const workspaces = await db.workspace.findMany({ where: { sendingEngine: "SALESBLINK", salesblinkApiKeyEnc: { not: null } }, select: { id: true } });
   const slot = Math.floor(Date.now() / 300_000);
   await getQueue(QUEUES.salesblink).addBulk(
     workspaces.map((w) => ({ name: "sync", data: { kind: "sync", workspaceId: w.id } satisfies SalesblinkJob, opts: { jobId: `sb-sync-${w.id}-${slot}`, attempts: 1 } })),

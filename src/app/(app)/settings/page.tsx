@@ -8,10 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { deleteWebhook, removeFromBlocklist, removeMember, renameWorkspace, revokeApiKey, toggleWebhook } from "./actions";
-import { ApiKeyForm, BlocklistForm, InviteForm, SendingEngineForm, WebhookForm } from "./forms";
+import { ApiKeyForm, BlocklistForm, InviteForm, SalesblinkPanel, WebhookForm } from "./forms";
+import { linkState } from "@/server/salesblink/provisioning";
 
 export default async function SettingsPage() {
-  const { workspace, role } = await requireWorkspace();
+  const { workspace, role, user } = await requireWorkspace();
+  const [sbLink, me] = await Promise.all([linkState(workspace), db.user.findUnique({ where: { id: user.id }, select: { role: true } })]);
   const [members, blocklist, blockCount, apiKeys, webhooks, inboxCount] = await Promise.all([
     db.workspaceMember.findMany({ where: { workspaceId: workspace.id }, include: { user: true }, orderBy: { createdAt: "asc" } }),
     db.globalBlocklist.findMany({ where: { workspaceId: workspace.id }, orderBy: { createdAt: "desc" }, take: 50 }),
@@ -45,14 +47,14 @@ export default async function SettingsPage() {
 
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Sending engine</CardTitle>
+            <CardTitle>SalesBlink</CardTitle>
             <CardDescription>
-              Which system sends your campaigns and warms up your inboxes. Applies to new campaigns; running campaigns keep their engine.
-              {workspace.sendingEngine === "SALESBLINK" && sbLastSync && <> Last SalesBlink sync {formatDistanceToNow(sbLastSync)} ago.</>}
+              Each MithMill workspace runs on its own SalesBlink workspace — SalesBlink does the sending, warm-up and inbox monitoring.
+              {sbState && workspace.salesblinkApiKeyEnc && sbLastSync && <> Last sync {formatDistanceToNow(sbLastSync)} ago.</>}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <SendingEngineForm engine={workspace.sendingEngine} hasKey={!!workspace.salesblinkApiKeyEnc} envKey={!!process.env.SALESBLINK_API_KEY} canEdit={role === "OWNER"} />
+            <SalesblinkPanel state={sbLink} sbWorkspaceName={workspace.salesblinkWorkspaceName} isOwner={role === "OWNER"} isSuperAdmin={me?.role === "SUPER_ADMIN"} />
           </CardContent>
         </Card>
 

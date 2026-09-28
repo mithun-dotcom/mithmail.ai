@@ -6,7 +6,19 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { FormMessage } from "@/components/form-message";
-import { addToBlocklist, createApiKey, createWebhook, inviteMember, saveSendingEngine, syncSalesblinkNow, type Result } from "./actions";
+import {
+  addToBlocklist,
+  createApiKey,
+  createSalesblinkWorkspaceAction,
+  createWebhook,
+  inviteMember,
+  linkSalesblinkKeyAction,
+  savePlatformKeyAction,
+  syncSalesblinkNow,
+  unlinkSalesblinkAction,
+  useMainSalesblinkWorkspaceAction,
+  type Result,
+} from "./actions";
 
 function Secret({ state }: { state: Result }) {
   if (!state.secret) return <FormMessage state={state} />;
@@ -79,51 +91,118 @@ export function WebhookForm({ events }: { events: readonly string[] }) {
   );
 }
 
-export function SendingEngineForm({ engine, hasKey, envKey, canEdit }: { engine: "BUILTIN" | "SALESBLINK"; hasKey: boolean; envKey: boolean; canEdit: boolean }) {
-  const [state, action, pending] = useActionState<Result, FormData>(saveSendingEngine, {});
-  const [choice, setChoice] = useState(engine);
-  const [syncState, setSyncState] = useState<Result>({});
-  const [syncing, startSync] = useTransition();
+type LinkState = "no-platform-key" | "not-created" | "awaiting-key" | "linked";
+
+function Step({ n, title, done, children }: { n: number; title: string; done?: boolean; children?: React.ReactNode }) {
   return (
-    <form action={action} className="grid gap-4">
-      {/* Hidden field, not the radios: React resets uncontrolled form fields after each submit. */}
-      <input type="hidden" name="engine" value={choice} />
-      <div className="grid gap-2 sm:grid-cols-2">
-        {(["SALESBLINK", "BUILTIN"] as const).map((e) => (
-          <label key={e} className={`flex cursor-pointer gap-3 rounded-lg border p-3 text-sm ${choice === e ? "border-royal-500 bg-royal-50" : ""}`}>
-            <input type="radio" value={e} checked={choice === e} onChange={() => setChoice(e)} disabled={!canEdit} className="mt-1" />
-            <span>
-              <span className="font-medium">{e === "SALESBLINK" ? "SalesBlink" : "Built-in (SMTP/IMAP)"}</span>
-              <span className="block text-xs text-muted-foreground">
-                {e === "SALESBLINK"
-                  ? "SalesBlink sends, warms up and monitors your inboxes. MithMill builds campaigns and shows results."
-                  : "MithMill's own workers send over SMTP, warm up and read replies over IMAP."}
-              </span>
-            </span>
-          </label>
-        ))}
+    <div className="flex gap-3">
+      <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${done ? "bg-emerald-600 text-white" : "bg-royal-100 text-royal-800"}`}>
+        {done ? "✓" : n}
+      </span>
+      <div className="grid flex-1 gap-2">
+        <p className="text-sm font-medium">{title}</p>
+        {children}
       </div>
-      {choice === "SALESBLINK" && (
-        <div className="grid gap-1.5">
-          <Input
-            name="apiKey"
-            type="password"
-            autoComplete="off"
-            disabled={!canEdit}
-            placeholder={hasKey ? "•••••••• saved — enter a new key to replace" : envKey ? "Using the server's SALESBLINK_API_KEY — or enter a workspace key" : "SalesBlink API key"}
-          />
-          <p className="text-xs text-muted-foreground">Get it at run.salesblink.io → Account → Integration → API. Stored encrypted.</p>
+    </div>
+  );
+}
+
+export function SalesblinkPanel({
+  state,
+  sbWorkspaceName,
+  isOwner,
+  isSuperAdmin,
+}: {
+  state: LinkState;
+  sbWorkspaceName: string | null;
+  isOwner: boolean;
+  isSuperAdmin: boolean;
+}) {
+  const [msg, setMsg] = useState<Result>({});
+  const [pending, start] = useTransition();
+  // Plain transitions (not <form action>): these forms disappear when the step completes,
+  // and a form action whose form unmounts mid-flight never applies the server's re-render.
+  const [linkState, setLinkState] = useState<Result>({});
+  const [platformState, setPlatformState] = useState<Result>({});
+  const run = (fn: () => Promise<Result>) => start(async () => setMsg(await fn()));
+  const submit = (fn: (s: Result, fd: FormData) => Promise<Result>, set: (r: Result) => void) => (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    start(async () => set(await fn({}, fd)));
+  };
+
+  if (state === "linked") {
+    return (
+      <div className="grid gap-3">
+        <p className="text-sm">
+          ✅ Linked to SalesBlink workspace <b>{sbWorkspaceName ?? "—"}</b>. Inboxes you connect here are added to it; campaigns, warm-up and replies run there.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" disabled={pending} onClick={() => run(syncSalesblinkNow)}>Sync now</Button>
+          {isOwner && (
+            <Button variant="ghost" disabled={pending} onClick={() => confirm("Unlink SalesBlink? New campaigns will use the built-in engine.") && run(unlinkSalesblinkAction)}>
+              Unlink
+            </Button>
+          )}
+          <FormMessage state={msg} />
         </div>
-      )}
-      <div className="flex flex-wrap items-center gap-3">
-        <Button disabled={pending || !canEdit}>{pending ? "Verifying…" : "Save engine"}</Button>
-        {engine === "SALESBLINK" && (
-          <Button type="button" variant="outline" disabled={syncing} onClick={() => startSync(async () => setSyncState(await syncSalesblinkNow()))}>
-            Sync now
-          </Button>
-        )}
-        <FormMessage state={state.error || state.message ? state : syncState} />
       </div>
-    </form>
+    );
+  }
+
+  if (state === "no-platform-key") {
+    return isSuperAdmin ? (
+      <form onSubmit={submit(savePlatformKeyAction, setPlatformState)} className="grid gap-2">
+        <p className="text-sm text-muted-foreground">
+          Paste your <b>main SalesBlink API key</b> (the account owner&apos;s, from run.salesblink.io → Account → Integration → API). MithMill uses it only to create one SalesBlink workspace per MithMill workspace.
+        </p>
+        <div className="flex gap-2">
+          <Input name="ownerKey" type="password" autoComplete="off" placeholder="SalesBlink owner API key" />
+          <Button disabled={pending}>{pending ? "Verifying…" : "Save"}</Button>
+        </div>
+        <FormMessage state={platformState} />
+      </form>
+    ) : (
+      <p className="text-sm text-muted-foreground">SalesBlink isn&apos;t set up on this platform yet. Ask the platform admin to add the SalesBlink owner key.</p>
+    );
+  }
+
+  return (
+    <div className="grid gap-4">
+      <Step n={1} title="Create this workspace's SalesBlink workspace" done={state === "awaiting-key"}>
+        {state === "not-created" ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button disabled={!isOwner || pending} onClick={() => run(createSalesblinkWorkspaceAction)}>Create SalesBlink workspace</Button>
+            <Button variant="ghost" disabled={!isOwner || pending} onClick={() => run(useMainSalesblinkWorkspaceAction)}>
+              Or use my main SalesBlink workspace
+            </Button>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Created: <b>{sbWorkspaceName}</b></p>
+        )}
+      </Step>
+      <Step n={2} title="Create an API key inside it (one time — SalesBlink only allows this in its dashboard)">
+        <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
+          <li>
+            Open{" "}
+            <a href="/api/salesblink/keys-link" target="_blank" rel="noopener" className="font-medium text-primary underline">
+              SalesBlink → API keys ↗
+            </a>
+          </li>
+          <li>
+            Switch to the workspace <b>{sbWorkspaceName ?? "for this client"}</b> (workspace menu, top left in SalesBlink).
+          </li>
+          <li>Create a new API key and copy it.</li>
+        </ol>
+      </Step>
+      <Step n={3} title="Paste the key to link">
+        <form onSubmit={submit(linkSalesblinkKeyAction, setLinkState)} className="flex gap-2">
+          <Input name="apiKey" type="password" autoComplete="off" placeholder="API key from that SalesBlink workspace" disabled={!isOwner} />
+          <Button disabled={!isOwner || pending}>{pending ? "Checking…" : "Link"}</Button>
+        </form>
+        <FormMessage state={linkState} />
+      </Step>
+      <FormMessage state={msg} />
+    </div>
   );
 }

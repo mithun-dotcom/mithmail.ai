@@ -10,6 +10,7 @@ import { requireWorkspace } from "@/server/workspace";
 import { testConnection } from "@/server/mail/clients";
 import { refreshDomainHealth } from "@/server/services/domain-health";
 import { clientFor, pushSenderSettings, syncSenders } from "@/server/salesblink/service";
+import { getQueue, QUEUES } from "@/server/queue";
 
 export type ActionState = { ok?: boolean; error?: string; message?: string };
 
@@ -123,6 +124,26 @@ const bulkRow = z.object({
 /** Bulk import from CSV rows (parsed client-side). Rows are stored without a live connection test. */
 export async function bulkImportAccounts(rows: Record<string, string>[]): Promise<ActionState> {
   const { workspace } = await requireWorkspace("ADMIN");
+  if (workspace.sendingEngine === "SALESBLINK") {
+    // Hand the whole batch to this workspace's SalesBlink workspace.
+    const cols = ["from_email", "password", "smtp_host", "smtp_port", "from_name", "user_name", "imap_host", "imap_port", "imap_user_name", "imap_password", "warmup_enabled", "sequence_max_daily_frequency"];
+    const esc = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+    const lines = rows
+      .filter((r) => r.email && r.smtp_host && r.smtp_pass)
+      .map((r) =>
+        [r.email, r.smtp_pass, r.smtp_host, r.smtp_port || "587", r.from_name ?? "", r.smtp_user || r.email, r.imap_host ?? "", r.imap_port || "993", r.imap_user || r.smtp_user || r.email, r.imap_pass || r.smtp_pass, "true", r.daily_limit || "30"]
+          .map((v) => esc(String(v)))
+          .join(","),
+      );
+    if (!lines.length) return { error: "No valid rows (email, smtp_host and smtp_pass are required)." };
+    try {
+      await clientFor(workspace).addBulkSenders([cols.join(","), ...lines].join("\n"));
+      await getQueue(QUEUES.salesblink).add("sync-senders", { kind: "sync-senders", workspaceId: workspace.id }, { delay: 120_000 });
+    } catch (e) {
+      return { error: `SalesBlink: ${(e as Error).message}` };
+    }
+    return { ok: true, message: `Sent ${lines.length} inboxes to SalesBlink. They'll appear here once SalesBlink connects them (a few minutes).` };
+  }
   const valid: z.infer<typeof bulkRow>[] = [];
   const errors: string[] = [];
   rows.forEach((r, i) => {

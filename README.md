@@ -44,7 +44,14 @@ Cold email automation and deliverability platform. **Smart outbound scales horiz
 
 ## SalesBlink engine
 
-A workspace can use **SalesBlink** as its engine instead of MithMill's own SMTP/IMAP workers. SalesBlink then does the sending, warm-up and inbox monitoring, and MithMill remains the product your users see. Switch it on in **Settings → Sending engine**: pick SalesBlink and paste the API key from run.salesblink.io → Account → Integration → API. The key is verified, then stored encrypted. `SALESBLINK_API_KEY` in the environment is used when a workspace has no key of its own.
+MithMill can use **SalesBlink** for sending, warm-up and inbox monitoring. MithMill remains the product your users see. **Each MithMill workspace gets its own SalesBlink workspace**, so every client's inboxes, leads and campaigns stay separate.
+
+**One-time platform setup:** sign in as the platform admin (super-admin) and open **Settings → SalesBlink**. Paste your main SalesBlink (account owner) API key, or set `SALESBLINK_API_KEY` in the environment. MithMill uses this key only to create workspaces.
+
+**Per workspace:**
+1. Creating a MithMill workspace automatically creates a SalesBlink workspace with the same name. Renames are mirrored.
+2. Once per workspace, create an API key *inside* that SalesBlink workspace. SalesBlink only allows this in its dashboard, so **Settings → SalesBlink** gives you a login link to its API-keys page. Paste the key back to link the workspaces. MithMill refuses a key that's already linked to another workspace, and your main key unless you choose "use my main SalesBlink workspace". Every later call for that workspace uses its own key; there's never a shared fallback.
+3. From then on, inboxes connected in MithMill (**Connect Google / Outlook**, the SMTP form, bulk CSV) are added to that SalesBlink workspace, and campaigns, warm-up and replies run there.
 
 | MithMill | SalesBlink |
 |---|---|

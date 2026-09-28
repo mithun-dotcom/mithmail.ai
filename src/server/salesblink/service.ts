@@ -25,14 +25,17 @@ const CONTACT_BATCH = 500;
 // Client resolution
 // ---------------------------------------------------------------------------
 
+/**
+ * Each MithMill workspace talks to its own SalesBlink workspace through its own key — never a
+ * shared fallback, so one client's inboxes and leads can't end up in another's SalesBlink workspace.
+ */
 export function salesblinkKey(ws: Pick<Workspace, "salesblinkApiKeyEnc">): string | null {
-  if (ws.salesblinkApiKeyEnc) return decrypt(ws.salesblinkApiKeyEnc);
-  return process.env.SALESBLINK_API_KEY || null;
+  return ws.salesblinkApiKeyEnc ? decrypt(ws.salesblinkApiKeyEnc) : null;
 }
 
 export function clientFor(ws: Pick<Workspace, "salesblinkApiKeyEnc">): SalesBlinkClient {
   const key = salesblinkKey(ws);
-  if (!key) throw new Error("No SalesBlink API key configured for this workspace (Settings → Sending engine).");
+  if (!key) throw new Error("This workspace isn't linked to its SalesBlink workspace yet (Settings → SalesBlink).");
   return new SalesBlinkClient(key);
 }
 

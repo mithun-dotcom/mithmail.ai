@@ -214,17 +214,20 @@ model VerificationToken {
 // --- Workspaces -------------------------------------------------------------
 
 model Workspace {
-  id                  String           @id @default(uuid()) @db.Uuid
-  name                String
-  slug                String           @unique
-  subscriptionTier    SubscriptionTier @default(FREE)
-  maxInboxes          Int              @default(5)
-  monthlyEmailQuota   Int              @default(1000)
-  sendingEngine       SendingEngine    @default(BUILTIN)
-  salesblinkApiKeyEnc String?          @db.Text // encrypted; falls back to SALESBLINK_API_KEY env
-  salesblinkSyncState Json? // activity/inbox sync cursors
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
+  id                      String           @id @default(uuid()) @db.Uuid
+  name                    String
+  slug                    String           @unique
+  subscriptionTier        SubscriptionTier @default(FREE)
+  maxInboxes              Int              @default(5)
+  monthlyEmailQuota       Int              @default(1000)
+  sendingEngine           SendingEngine    @default(BUILTIN)
+  salesblinkApiKeyEnc     String?          @db.Text // encrypted; falls back to SALESBLINK_API_KEY env
+  salesblinkSyncState     Json? // activity/inbox sync cursors
+  salesblinkWorkspaceId   String? // the SalesBlink workspace this MithMill workspace maps to
+  salesblinkWorkspaceName String?
+  salesblinkKeyHash       String?          @unique // sha256 of the linked key: one SalesBlink workspace per MithMill workspace
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
 
   members         WorkspaceMember[]
   blocklist       GlobalBlocklist[]
@@ -666,4 +669,11 @@ model PlacementTest {
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId, createdAt])
+}
+
+// Platform-wide settings managed by super-admins (encrypted where secret).
+model PlatformSetting {
+  key       String   @id // e.g. "salesblink_owner_key"
+  valueEnc  String   @db.Text
+  updatedAt DateTime @updatedAt
 }
