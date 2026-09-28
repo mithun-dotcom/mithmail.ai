@@ -13,6 +13,7 @@ import {
   linkState,
   linkWorkspaceKey,
   linkMainSalesblinkWorkspace,
+  moveToOwnSalesblinkWorkspace,
   renameSalesblinkWorkspace,
   salesblinkWorkspaceName,
 } from "@/server/salesblink/provisioning";
@@ -116,5 +117,19 @@ describe("SalesBlink workspace provisioning", () => {
     // …but only one.
     const e = await newWorkspace(`Client E ${run}`);
     await expect(linkMainSalesblinkWorkspace(e.id)).rejects.toThrow(/already linked/);
+  });
+
+  it("moves a workspace off the main SalesBlink workspace onto its own", async () => {
+    const d = await db.workspace.findFirstOrThrow({ where: { salesblinkKeyHash: sha256(OWNER), id: { in: ids } } });
+    await db.emailAccount.create({ data: { workspaceId: d.id, emailAddress: `main-${run}@x.io`, provider: "SMTP", salesblinkSenderId: "snd_main" } });
+    const r = await moveToOwnSalesblinkWorkspace(d.id);
+    expect(r).toEqual({ name: `Client D ${run}`, removedInboxes: 1 });
+    const saved = await db.workspace.findUniqueOrThrow({ where: { id: d.id } });
+    expect(saved.salesblinkApiKeyEnc).toBeNull();
+    expect(saved.salesblinkKeyHash).toBeNull();
+    expect(mock.state.workspaces.some((w) => w.id === saved.salesblinkWorkspaceId && w.name === `Client D ${run}`)).toBe(true);
+    expect(await linkState(saved)).toBe("awaiting-key");
+    expect(await db.emailAccount.count({ where: { workspaceId: d.id } })).toBe(0);
+    await expect(moveToOwnSalesblinkWorkspace(d.id)).rejects.toThrow(/already has its own/);
   });
 });

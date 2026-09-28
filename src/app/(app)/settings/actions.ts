@@ -166,6 +166,18 @@ export async function useMainSalesblinkWorkspaceAction(): Promise<Result> {
   return { ok: true, message: "Linked to your main SalesBlink workspace." };
 }
 
+export async function moveToOwnSalesblinkWorkspaceAction(): Promise<Result> {
+  const { workspace } = await requireWorkspace("OWNER");
+  const { moveToOwnSalesblinkWorkspace } = await import("@/server/salesblink/provisioning");
+  try {
+    const r = await moveToOwnSalesblinkWorkspace(workspace.id);
+    revalidatePath("/", "layout");
+    return { ok: true, message: `Created SalesBlink workspace "${r.name}" and removed ${r.removedInboxes} inboxes that belonged to your main workspace. Now create an API key inside it (step 2).` };
+  } catch (e) {
+    return { error: `SalesBlink: ${(e as Error).message}` };
+  }
+}
+
 export async function unlinkSalesblinkAction(): Promise<Result> {
   const { workspace } = await requireWorkspace("OWNER");
   const { unlinkWorkspace } = await import("@/server/salesblink/provisioning");

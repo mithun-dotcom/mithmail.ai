@@ -132,3 +132,32 @@ export async function linkState(ws: Pick<Workspace, "salesblinkApiKeyEnc" | "sal
   if (ws.salesblinkWorkspaceId) return "awaiting-key";
   return (await platformOwnerKey()) ? "not-created" : "no-platform-key";
 }
+
+/**
+ * For a workspace that was linked to the main SalesBlink workspace: creates its own SalesBlink
+ * workspace, drops the main key and removes the inboxes that were mirrored from the main
+ * workspace (they stay in SalesBlink). The workspace is then waiting for its own key (step 2).
+ */
+export async function moveToOwnSalesblinkWorkspace(workspaceId: string) {
+  const ws = await db.workspace.findUniqueOrThrow({ where: { id: workspaceId } });
+  if (ws.salesblinkWorkspaceId) throw new LinkKeyError("This workspace already has its own SalesBlink workspace.");
+  const client = await platformClient();
+  if (!client) throw new LinkKeyError("No platform SalesBlink key is configured.");
+  const name = salesblinkWorkspaceName(ws.name);
+  const res = await client.request<{ data: { id: string; name: string } }>("POST", "/workspaces", { json: { name } });
+  const [removed] = await db.$transaction([
+    db.emailAccount.deleteMany({ where: { workspaceId, salesblinkSenderId: { not: null } } }),
+    db.workspace.update({
+      where: { id: workspaceId },
+      data: {
+        salesblinkWorkspaceId: res.data.id,
+        salesblinkWorkspaceName: res.data.name ?? name,
+        salesblinkApiKeyEnc: null,
+        salesblinkKeyHash: null,
+        salesblinkSyncState: {},
+        sendingEngine: "SALESBLINK",
+      },
+    }),
+  ]);
+  return { name: res.data.name ?? name, removedInboxes: removed.count };
+}

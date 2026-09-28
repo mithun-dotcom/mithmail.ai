@@ -54,7 +54,7 @@ export default async function SettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <SalesblinkPanel state={sbLink} sbWorkspaceName={workspace.salesblinkWorkspaceName} isOwner={role === "OWNER"} isSuperAdmin={me?.role === "SUPER_ADMIN"} />
+            <SalesblinkPanel state={sbLink} sbWorkspaceName={workspace.salesblinkWorkspaceName} usesMainWorkspace={sbLink === "linked" && !workspace.salesblinkWorkspaceId} isOwner={role === "OWNER"} isSuperAdmin={me?.role === "SUPER_ADMIN"} />
           </CardContent>
         </Card>
 

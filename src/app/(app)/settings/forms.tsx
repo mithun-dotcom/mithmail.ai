@@ -15,6 +15,7 @@ import {
   linkSalesblinkKeyAction,
   savePlatformKeyAction,
   syncSalesblinkNow,
+  moveToOwnSalesblinkWorkspaceAction,
   unlinkSalesblinkAction,
   useMainSalesblinkWorkspaceAction,
   type Result,
@@ -110,11 +111,13 @@ function Step({ n, title, done, children }: { n: number; title: string; done?: b
 export function SalesblinkPanel({
   state,
   sbWorkspaceName,
+  usesMainWorkspace,
   isOwner,
   isSuperAdmin,
 }: {
   state: LinkState;
   sbWorkspaceName: string | null;
+  usesMainWorkspace?: boolean;
   isOwner: boolean;
   isSuperAdmin: boolean;
 }) {
@@ -134,9 +137,31 @@ export function SalesblinkPanel({
   if (state === "linked") {
     return (
       <div className="grid gap-3">
-        <p className="text-sm">
-          ✅ Linked to SalesBlink workspace <b>{sbWorkspaceName ?? "—"}</b>. Inboxes you connect here are added to it; campaigns, warm-up and replies run there.
-        </p>
+        {usesMainWorkspace ? (
+          <div className="grid gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+            <p>
+              ⚠️ This workspace uses your <b>main SalesBlink workspace</b>, so it shows every inbox in your SalesBlink account. Give it its own SalesBlink
+              workspace to keep only this workspace&apos;s inboxes here.
+            </p>
+            {isOwner && (
+              <Button
+                className="justify-self-start"
+                disabled={pending}
+                onClick={() =>
+                  confirm(
+                    "Create a separate SalesBlink workspace for this workspace?\n\nInboxes imported from your main SalesBlink workspace are removed from MithMill (they stay in SalesBlink). You'll then create an API key in the new SalesBlink workspace and connect inboxes again.",
+                  ) && run(moveToOwnSalesblinkWorkspaceAction)
+                }
+              >
+                Give this workspace its own SalesBlink workspace
+              </Button>
+            )}
+          </div>
+        ) : (
+          <p className="text-sm">
+            ✅ Linked to SalesBlink workspace <b>{sbWorkspaceName ?? "—"}</b>. Inboxes you connect here are added to it; campaigns, warm-up and replies run there.
+          </p>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" disabled={pending} onClick={() => run(syncSalesblinkNow)}>Sync now</Button>
           {isOwner && (
