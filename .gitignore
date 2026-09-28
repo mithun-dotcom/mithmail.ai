@@ -9,3 +9,4 @@ next-env.d.ts
 coverage/
 .DS_Store
 .dev-mail/
+dump.rdb

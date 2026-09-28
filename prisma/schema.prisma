@@ -24,6 +24,13 @@ datasource db {
 // Enums
 // =============================================================================
 
+// Which engine actually sends and warms up. BUILTIN = MithMill's own SMTP/IMAP
+// workers; SALESBLINK = SalesBlink's API does sending, warm-up and inbox.
+enum SendingEngine {
+  BUILTIN
+  SALESBLINK
+}
+
 enum UserRole {
   SUPER_ADMIN
   USER
@@ -207,14 +214,17 @@ model VerificationToken {
 // --- Workspaces -------------------------------------------------------------
 
 model Workspace {
-  id                String           @id @default(uuid()) @db.Uuid
-  name              String
-  slug              String           @unique
-  subscriptionTier  SubscriptionTier @default(FREE)
-  maxInboxes        Int              @default(5)
-  monthlyEmailQuota Int              @default(1000)
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
+  id                  String           @id @default(uuid()) @db.Uuid
+  name                String
+  slug                String           @unique
+  subscriptionTier    SubscriptionTier @default(FREE)
+  maxInboxes          Int              @default(5)
+  monthlyEmailQuota   Int              @default(1000)
+  sendingEngine       SendingEngine    @default(BUILTIN)
+  salesblinkApiKeyEnc String?          @db.Text // encrypted; falls back to SALESBLINK_API_KEY env
+  salesblinkSyncState Json? // activity/inbox sync cursors
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
 
   members         WorkspaceMember[]
   blocklist       GlobalBlocklist[]
@@ -289,6 +299,12 @@ model EmailAccount {
   signature        String? @db.Text
   trackingDomainId String? @db.Uuid
 
+  // SalesBlink-managed inbox (engine = SALESBLINK): no local credentials.
+  salesblinkSenderId String?
+  healthScore        Int? // 0-100, from SalesBlink sender health
+  externalStats      Json? // SalesBlink health snapshot (7d sends, warm-up 30d)
+  externalSyncedAt   DateTime?
+
   // Warm-up
   isWarmupEnabled  Boolean   @default(false)
   warmupStartedAt  DateTime? // ramp-up day 1
@@ -309,6 +325,7 @@ model EmailAccount {
   warmupsReceived WarmupLog[]            @relation("WarmupRecipient")
 
   @@unique([workspaceId, emailAddress])
+  @@unique([workspaceId, salesblinkSenderId])
   @@index([status, isWarmupEnabled])
 }
 
@@ -353,6 +370,11 @@ model Campaign {
   workspaceId        String         @db.Uuid
   name               String
   status             CampaignStatus @default(DRAFT)
+  engine             SendingEngine  @default(BUILTIN)
+  sbSequenceId       String? // SalesBlink sequence
+  sbListId           String? // SalesBlink list holding this campaign's leads
+  sbLaunchState      String? // null | LAUNCHING | LAUNCHED | ERROR
+  sbLaunchError      String?        @db.Text
   trackOpens         Boolean        @default(true)
   trackClicks        Boolean        @default(false)
   scheduleTimezone   String         @default("UTC") // IANA tz, e.g. "America/New_York"
@@ -403,6 +425,7 @@ model CampaignStep {
   bodyHtml       String?          @db.Text
   bodySpintax    String?          @db.Text // raw template, e.g. "{Hi|Hello} {{first_name}}"
   abTestVariants Json? // [{ id, subject, bodySpintax, weight }]
+  sbTemplateId   String? // SalesBlink template for this step
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 
@@ -460,6 +483,7 @@ model CampaignLead {
   currentStepNumber Int                @default(0) // 0 = not started
   status            CampaignLeadStatus @default(ACTIVE)
   assignedAccountId String?            @db.Uuid // sticky inbox so follow-ups come from the same sender
+  sbPushedAt        DateTime? // when this lead was pushed to the SalesBlink list
   nextSendAt        DateTime?          @default(now()) // null while an email is in flight
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
@@ -479,6 +503,7 @@ model EmailLog {
   leadId         String         @db.Uuid
   emailAccountId String         @db.Uuid
   messageId      String?        @unique // RFC 5322 Message-ID; matched against In-Reply-To / References
+  externalId     String?        @unique // SalesBlink activity id (engine = SALESBLINK)
   variantId      String? // A/B variant that was sent
   subject        String?
   body           String?        @db.Text // rendered HTML actually sent (shown in the Unibox thread)

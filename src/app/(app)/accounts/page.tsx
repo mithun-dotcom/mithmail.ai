@@ -10,6 +10,8 @@ import { Table, TBody, THead } from "@/components/ui/table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DnsBadge } from "@/components/dns-badge";
 import { StatusBadge } from "@/components/status-badge";
+import { Badge } from "@/components/ui/badge";
+import { SalesblinkSyncButton } from "./sync-button";
 
 export default async function AccountsPage() {
   const { workspace } = await requireWorkspace();
@@ -26,6 +28,7 @@ export default async function AccountsPage() {
     }),
   ]);
   const sentMap = new Map(sentToday.map((s) => [s.emailAccountId, s._count]));
+  const sb = workspace.sendingEngine === "SALESBLINK";
   const totalCapacity = accounts.filter((a) => a.status === "ACTIVE").reduce((n, a) => n + a.dailyLimit, 0);
 
   return (
@@ -34,9 +37,12 @@ export default async function AccountsPage() {
         title="Email accounts"
         description={`${accounts.length} / ${workspace.maxInboxes} inboxes · ${totalCapacity.toLocaleString()} emails/day capacity`}
         actions={
-          <Link href="/accounts/new" className={buttonVariants()}>
-            <Plus /> Add inboxes
-          </Link>
+          <>
+            {sb && <SalesblinkSyncButton />}
+            <Link href="/accounts/new" className={buttonVariants()}>
+              <Plus /> Add inboxes
+            </Link>
+          </>
         }
       />
       {accounts.length === 0 ? (
@@ -54,6 +60,7 @@ export default async function AccountsPage() {
                 <th>Status</th>
                 <th>Sent today</th>
                 <th>Warm-up</th>
+                {sb && <th>Health</th>}
                 <th>DNS</th>
               </tr>
             </THead>
@@ -64,7 +71,10 @@ export default async function AccountsPage() {
                     <Link href={`/accounts/${a.id}`} className="font-medium text-royal-800 hover:underline">
                       {a.emailAddress}
                     </Link>
-                    <p className="text-xs text-muted-foreground">{a.provider.toLowerCase()}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {a.provider.toLowerCase()}
+                      {a.salesblinkSenderId && " · via SalesBlink"}
+                    </p>
                   </td>
                   <td>
                     <StatusBadge status={a.status} />
@@ -81,6 +91,15 @@ export default async function AccountsPage() {
                       <span className="text-sm text-muted-foreground">off</span>
                     )}
                   </td>
+                  {sb && (
+                    <td>
+                      {a.healthScore === null ? (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      ) : (
+                        <Badge variant={a.healthScore >= 80 ? "success" : a.healthScore >= 60 ? "warning" : "danger"}>{a.healthScore}/100</Badge>
+                      )}
+                    </td>
+                  )}
                   <td className="space-x-1">
                     <DnsBadge label="SPF" status={a.domainHealth?.spfStatus} />
                     <DnsBadge label="DKIM" status={a.domainHealth?.dkimStatus} />

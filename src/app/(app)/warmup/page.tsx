@@ -60,21 +60,30 @@ export default async function WarmupPage() {
             </THead>
             <TBody>
               {accounts.map((a) => {
-                const sent = S.get(a.id) ?? 0;
-                const spam = SP.get(a.id) ?? 0;
+                const ext = a.salesblinkSenderId ? (a.externalStats as { warmup30Days?: { sent: number; replies: number } } | null) : null;
+                const sent = ext ? (ext.warmup30Days?.sent ?? 0) : (S.get(a.id) ?? 0);
+                const spam = ext ? 0 : (SP.get(a.id) ?? 0);
                 const day = a.warmupStartedAt ? Math.floor((Date.now() - a.warmupStartedAt.getTime()) / 86_400_000) + 1 : 0;
                 const rate = sent ? 100 - pct(spam, sent) : null;
                 return (
                   <tr key={a.id}>
                     <td><Link href={`/accounts/${a.id}`} className="font-medium text-royal-800 hover:underline">{a.emailAddress}</Link></td>
                     <td>{a.isWarmupEnabled ? <Badge variant="warning">on</Badge> : <Badge variant="muted">off</Badge>}</td>
-                    <td className="text-xs text-muted-foreground">{a.isWarmupEnabled ? `day ${day} · target ${dailyWarmupTarget(a)}/day` : "—"}</td>
+                    <td className="text-xs text-muted-foreground">
+                      {a.salesblinkSenderId ? "managed by SalesBlink" : a.isWarmupEnabled ? `day ${day} · target ${dailyWarmupTarget(a)}/day` : "—"}
+                    </td>
                     <td className="tabular-nums">{T.get(a.id) ?? 0}</td>
                     <td className="tabular-nums">{sent}</td>
                     <td className="tabular-nums">{R.get(a.id) ?? 0}</td>
-                    <td className="tabular-nums">{RP.get(a.id) ?? 0}</td>
+                    <td className="tabular-nums">{ext ? (ext.warmup30Days?.replies ?? 0) : (RP.get(a.id) ?? 0)}</td>
                     <td className="tabular-nums">
-                      {rate === null ? "—" : <span className={rate >= 90 ? "text-emerald-700" : rate >= 75 ? "text-amber-700" : "text-red-700"}>{rate}%</span>}
+                      {ext ? (
+                        <span title="SalesBlink sender health score">{a.healthScore ?? "—"}{a.healthScore !== null && "/100 health"}</span>
+                      ) : rate === null ? (
+                        "—"
+                      ) : (
+                        <span className={rate >= 90 ? "text-emerald-700" : rate >= 75 ? "text-amber-700" : "text-red-700"}>{rate}%</span>
+                      )}
                     </td>
                     <td>
                       <form action={toggleWarmup.bind(null, a.id, !a.isWarmupEnabled)}>

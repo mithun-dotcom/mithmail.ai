@@ -37,12 +37,16 @@ export function SettingsForm({
   campaigns,
   initial,
   subsequence,
+  engine,
+  locked,
 }: {
   campaignId: string;
   accounts: Account[];
   campaigns: { id: string; name: string }[];
   initial: Options;
   subsequence: { parentCampaignId: string | null; triggerLabel: string | null };
+  engine: "BUILTIN" | "SALESBLINK";
+  locked: boolean;
 }) {
   const [v, setV] = useState(initial);
   const [sub, setSub] = useState(subsequence);
@@ -92,7 +96,13 @@ export function SettingsForm({
             <CardTitle>Options</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-3">
-            {TOGGLES.map((t) => (
+            {engine === "SALESBLINK" && (
+              <p className="rounded-md bg-royal-50 px-3 py-2 text-xs text-royal-900">
+                Sent through SalesBlink. Stop-on-reply, ESP matching and plain text are passed to SalesBlink; open/click tracking and unsubscribe links follow your SalesBlink sender settings.
+                {locked && " This campaign is live on SalesBlink — changes here won't affect it; duplicate it to change settings."}
+              </p>
+            )}
+            {TOGGLES.filter((t) => engine === "BUILTIN" || !["trackOpens", "trackClicks", "includeUnsubscribe"].includes(t.key)).map((t) => (
               <label key={t.key} className="flex items-start gap-3 text-sm">
                 <input type="checkbox" className="mt-1" checked={v[t.key] as boolean} onChange={(e) => setV({ ...v, [t.key]: e.target.checked })} />
                 <span>

@@ -67,6 +67,7 @@ export async function processSendJob(emailLogId: string, isFinalAttempt: boolean
     return `cancelled: ${reason}`;
   };
   if (!step) return cancel("step deleted", true);
+  if (campaign.engine !== "BUILTIN") return cancel("campaign runs on SalesBlink", false);
   if (campaign.status !== "ACTIVE") return cancel("campaign not active", true);
   if (account.status !== "ACTIVE") return cancel("inbox not active", true);
   const cl = await db.campaignLead.findUnique({ where: { campaignId_leadId: clWhere } });

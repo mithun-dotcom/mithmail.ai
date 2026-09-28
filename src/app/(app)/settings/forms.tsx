@@ -1,12 +1,12 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { FormMessage } from "@/components/form-message";
-import { addToBlocklist, createApiKey, createWebhook, inviteMember, type Result } from "./actions";
+import { addToBlocklist, createApiKey, createWebhook, inviteMember, saveSendingEngine, syncSalesblinkNow, type Result } from "./actions";
 
 function Secret({ state }: { state: Result }) {
   if (!state.secret) return <FormMessage state={state} />;
@@ -75,6 +75,55 @@ export function WebhookForm({ events }: { events: readonly string[] }) {
       </div>
       <Button disabled={pending} className="justify-self-start">Add webhook</Button>
       <Secret state={state} />
+    </form>
+  );
+}
+
+export function SendingEngineForm({ engine, hasKey, envKey, canEdit }: { engine: "BUILTIN" | "SALESBLINK"; hasKey: boolean; envKey: boolean; canEdit: boolean }) {
+  const [state, action, pending] = useActionState<Result, FormData>(saveSendingEngine, {});
+  const [choice, setChoice] = useState(engine);
+  const [syncState, setSyncState] = useState<Result>({});
+  const [syncing, startSync] = useTransition();
+  return (
+    <form action={action} className="grid gap-4">
+      {/* Hidden field, not the radios: React resets uncontrolled form fields after each submit. */}
+      <input type="hidden" name="engine" value={choice} />
+      <div className="grid gap-2 sm:grid-cols-2">
+        {(["SALESBLINK", "BUILTIN"] as const).map((e) => (
+          <label key={e} className={`flex cursor-pointer gap-3 rounded-lg border p-3 text-sm ${choice === e ? "border-royal-500 bg-royal-50" : ""}`}>
+            <input type="radio" value={e} checked={choice === e} onChange={() => setChoice(e)} disabled={!canEdit} className="mt-1" />
+            <span>
+              <span className="font-medium">{e === "SALESBLINK" ? "SalesBlink" : "Built-in (SMTP/IMAP)"}</span>
+              <span className="block text-xs text-muted-foreground">
+                {e === "SALESBLINK"
+                  ? "SalesBlink sends, warms up and monitors your inboxes. MithMill builds campaigns and shows results."
+                  : "MithMill's own workers send over SMTP, warm up and read replies over IMAP."}
+              </span>
+            </span>
+          </label>
+        ))}
+      </div>
+      {choice === "SALESBLINK" && (
+        <div className="grid gap-1.5">
+          <Input
+            name="apiKey"
+            type="password"
+            autoComplete="off"
+            disabled={!canEdit}
+            placeholder={hasKey ? "•••••••• saved — enter a new key to replace" : envKey ? "Using the server's SALESBLINK_API_KEY — or enter a workspace key" : "SalesBlink API key"}
+          />
+          <p className="text-xs text-muted-foreground">Get it at run.salesblink.io → Account → Integration → API. Stored encrypted.</p>
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-3">
+        <Button disabled={pending || !canEdit}>{pending ? "Verifying…" : "Save engine"}</Button>
+        {engine === "SALESBLINK" && (
+          <Button type="button" variant="outline" disabled={syncing} onClick={() => startSync(async () => setSyncState(await syncSalesblinkNow()))}>
+            Sync now
+          </Button>
+        )}
+        <FormMessage state={state.error || state.message ? state : syncState} />
+      </div>
     </form>
   );
 }

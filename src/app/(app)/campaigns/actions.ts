@@ -8,6 +8,8 @@ import { db } from "@/lib/db";
 import { requireWorkspace } from "@/server/workspace";
 import { aiEnabled, generateSequence, type GeneratedStep } from "@/server/ai";
 import { queueIcebreakers } from "@/server/services/icebreakers";
+import { getQueue, QUEUES, type SalesblinkJob } from "@/server/queue";
+import { setSalesblinkCampaignStatus } from "@/server/salesblink/service";
 import { scheduleSchema, stepSchema, type ScheduleDraft, type StepDraft } from "@/lib/campaign-types";
 import { validateTemplate } from "@/lib/template";
 
@@ -27,6 +29,7 @@ export async function createCampaign(formData: FormData) {
     data: {
       workspaceId: workspace.id,
       name,
+      engine: workspace.sendingEngine,
       schedule: { create: { daysOfWeek: [1, 2, 3, 4, 5], startTime: "09:00", endTime: "17:00" } },
       steps: { create: { stepNumber: 1, waitDays: 0, subject: "", bodySpintax: "" } },
     },
@@ -42,7 +45,10 @@ export async function renameCampaign(id: string, name: string): Promise<Result> 
 }
 
 export async function saveSequence(id: string, steps: StepDraft[]): Promise<Result> {
-  await ownCampaign(id);
+  const { campaign } = await ownCampaign(id);
+  if (campaign.engine === "SALESBLINK" && campaign.sbSequenceId) {
+    return { error: "This campaign is live on SalesBlink — its emails are already queued there. Duplicate the campaign to change the sequence." };
+  }
   const parsed = z.array(stepSchema).min(1).max(15).safeParse(steps.map((s, i) => ({ ...s, stepNumber: i + 1 })));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid sequence" };
 
@@ -149,6 +155,18 @@ export async function launchCampaign(id: string): Promise<Result> {
   if (c._count.campaignLeads === 0) problems.push("Add leads.");
   if (problems.length) return { error: problems.join(" ") };
 
+  if (c.engine === "SALESBLINK") {
+    // SalesBlink does the sending: build list + templates + sequence there, in the background.
+    await db.campaign.update({ where: { id }, data: { sbLaunchState: "LAUNCHING", sbLaunchError: null } });
+    await getQueue(QUEUES.salesblink).add("launch", { kind: "launch", campaignId: id } satisfies SalesblinkJob, {
+      jobId: `sb-launch-${id}-${Date.now()}`,
+      attempts: 3,
+      backoff: { type: "exponential", delay: 60_000 },
+    });
+    revalidatePath(`/campaigns/${id}`);
+    return { ok: true, message: "Launching on SalesBlink — this takes a minute or two." };
+  }
+
   await db.campaign.update({ where: { id }, data: { status: "ACTIVE" } });
   // Leads that have never been scheduled become due immediately (the scheduler applies the send window).
   await db.campaignLead.updateMany({ where: { campaignId: id, status: "ACTIVE", nextSendAt: null, currentStepNumber: 0 }, data: { nextSendAt: new Date() } });
@@ -158,7 +176,14 @@ export async function launchCampaign(id: string): Promise<Result> {
 }
 
 export async function pauseCampaign(id: string): Promise<Result> {
-  await ownCampaign(id);
+  const { campaign } = await ownCampaign(id);
+  if (campaign.engine === "SALESBLINK" && campaign.sbSequenceId) {
+    try {
+      await setSalesblinkCampaignStatus(id, "PAUSED");
+    } catch (e) {
+      return { error: `SalesBlink: ${(e as Error).message}` };
+    }
+  }
   await db.campaign.update({ where: { id }, data: { status: "PAUSED" } });
   revalidatePath(`/campaigns/${id}`);
   revalidatePath("/campaigns");
@@ -172,6 +197,7 @@ export async function duplicateCampaign(id: string) {
     data: {
       workspaceId: workspace.id,
       name: `${campaign.name} (copy)`,
+      engine: workspace.sendingEngine,
       trackOpens: full.trackOpens,
       trackClicks: full.trackClicks,
       scheduleTimezone: full.scheduleTimezone,
@@ -201,14 +227,23 @@ export async function duplicateCampaign(id: string) {
 }
 
 export async function deleteCampaign(id: string) {
-  await ownCampaign(id);
+  const { campaign } = await ownCampaign(id);
+  if (campaign.engine === "SALESBLINK" && campaign.sbSequenceId) {
+    await setSalesblinkCampaignStatus(id, "ARCHIVED").catch(() => undefined);
+  }
   await db.campaign.delete({ where: { id } });
   revalidatePath("/campaigns");
   redirect("/campaigns");
 }
 
 export async function removeCampaignLeads(id: string, campaignLeadIds: string[]): Promise<Result> {
-  await ownCampaign(id);
+  const { campaign } = await ownCampaign(id);
+  if (campaign.engine === "SALESBLINK" && campaign.sbListId) {
+    const rows = await db.campaignLead.findMany({ where: { campaignId: id, id: { in: campaignLeadIds }, sbPushedAt: { not: null } }, include: { lead: { select: { email: true } } } });
+    if (rows.length) {
+      await getQueue(QUEUES.salesblink).add("remove-leads", { kind: "remove-leads", campaignId: id, emails: rows.map((r) => r.lead.email) } satisfies SalesblinkJob, { attempts: 3 });
+    }
+  }
   await db.campaignLead.deleteMany({ where: { campaignId: id, id: { in: campaignLeadIds } } });
   revalidatePath(`/campaigns/${id}/leads`);
   return { ok: true };
@@ -234,7 +269,10 @@ export async function generateIcebreakersAction(id: string): Promise<Result> {
 }
 
 export async function setCampaignLeadStatus(id: string, campaignLeadIds: string[], status: "ACTIVE" | "PAUSED"): Promise<Result> {
-  await ownCampaign(id);
+  const { campaign } = await ownCampaign(id);
+  if (campaign.engine === "SALESBLINK" && campaign.sbSequenceId) {
+    return { error: "SalesBlink doesn't support pausing individual leads. Remove them from the campaign instead, or pause the whole campaign." };
+  }
   await db.campaignLead.updateMany({
     where: { campaignId: id, id: { in: campaignLeadIds }, status: status === "ACTIVE" ? "PAUSED" : "ACTIVE" },
     data: status === "ACTIVE" ? { status, nextSendAt: new Date() } : { status, nextSendAt: null },

@@ -6,6 +6,7 @@ import { getQueue, QUEUES } from "@/server/queue";
 import { startDnsCheckWorker } from "./dns-check";
 import { startSchedulerWorker, startSendWorker, startWebhookWorker } from "./send-email";
 import { startAiWorker, startFetchRepliesWorker, startPlacementWorker, startWarmupWorker } from "./inbox";
+import { startSalesblinkWorker } from "./salesblink";
 import { logger } from "./logger";
 
 async function scheduleRepeatables() {
@@ -15,6 +16,8 @@ async function scheduleRepeatables() {
   await getQueue(QUEUES.scheduler).upsertJobScheduler("campaign-tick", { every: 60_000 }, { name: "tick", data: {} });
   // Reply detection: poll every inbox over IMAP every 5 minutes.
   await getQueue(QUEUES.fetchReplies).upsertJobScheduler("imap-fanout", { every: 5 * 60_000 }, { name: "fanout", data: { fanout: true } });
+  // SalesBlink engine: pull senders, activity and replies every 5 minutes.
+  await getQueue(QUEUES.salesblink).upsertJobScheduler("salesblink-fanout", { every: 5 * 60_000 }, { name: "fanout", data: { kind: "fanout" } });
   // Warm-up planner: every 15 minutes during the active window.
   await getQueue(QUEUES.warmup).upsertJobScheduler("warmup-plan", { every: 15 * 60_000 }, { name: "plan", data: { plan: true } });
 }
@@ -30,6 +33,7 @@ async function main() {
     dns: startDnsCheckWorker,
     placement: startPlacementWorker,
     ai: startAiWorker,
+    salesblink: startSalesblinkWorker,
   };
   // WORKERS=send,replies lets you scale each queue as its own process.
   const workers: Worker[] = Object.entries(all)

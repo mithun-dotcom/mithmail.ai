@@ -42,6 +42,28 @@ Cold email automation and deliverability platform. **Smart outbound scales horiz
 * **Reply detection** (`src/server/inbox/`): IMAP sync by UID. Replies are matched by `In-Reply-To`/`References` → `EmailLog.messageId`, falling back to the sender's address. It also parses bounce reports (DSNs) and handles warm-up traffic.
 * Queue names are `send-email`, `fetch-replies`, `warmup-sync`, `dns-check`, `campaign-scheduler`, `webhooks` (BullMQ doesn't allow `:` in queue names).
 
+## SalesBlink engine
+
+A workspace can use **SalesBlink** as its engine instead of MithMill's own SMTP/IMAP workers. SalesBlink then does the sending, warm-up and inbox monitoring, and MithMill remains the product your users see. Switch it on in **Settings → Sending engine**: pick SalesBlink and paste the API key from run.salesblink.io → Account → Integration → API. The key is verified, then stored encrypted. `SALESBLINK_API_KEY` in the environment is used when a workspace has no key of its own.
+
+| MithMill | SalesBlink |
+|---|---|
+| Email accounts | Senders are synced every 30 min (health score, warm-up state). New inboxes are connected on SalesBlink's page (Google/Outlook) or through the SMTP form, which calls `add-sender` |
+| Inbox settings / Warm-up page | Daily limit, warm-up on/off, ramp-up and max are pushed with `PATCH /senders/{id}` |
+| Campaign launch | Creates a list, pushes the leads, creates one template per step and the sequence (schedule, timezone, random delay, stop-on-reply, provider matching), then starts it |
+| Personalisation | SalesBlink templates only support plain merge tags. MithMill renders each lead's emails itself (spintax, `{{var\|fallback}}`, A/B variants, AI icebreakers) and sends them as the contact fields `mm_subject_N` / `mm_body_N`. The templates are just `{{mm_subject_N}}` / `{{mm_body_N}}` |
+| Pause / resume / delete | `POST /sequences/{id}/status` |
+| Leads added later / removed | Pushed to or removed from the SalesBlink list in the background |
+| Analytics | The sent / opens / clicks / replies feeds are written into MithMill's email log every 5 min, so the dashboards are unchanged. Bounces and unsubscribes are read from sequence lead status |
+| Unibox | SalesBlink inbox threads are imported and AI-labelled. Replies, labels (outcome) and read state go back through the SalesBlink inbox API |
+| Blocklist | Entries are mirrored to SalesBlink's blocklist |
+
+Notes:
+- SalesBlink's limits are 30 GET/min, 15 POST+PATCH/min and 10 PUT+DELETE/min per key. The client shares a Redis rate limiter across all processes and retries 429s. Launching large campaigns takes a few minutes (500 leads per call).
+- A campaign that is live on SalesBlink has its emails already queued there. To change its sequence, duplicate the campaign. Individual leads can't be paused through the API; remove them instead.
+- Each SalesBlink API key belongs to exactly one SalesBlink workspace. Use a separate key per MithMill workspace to keep tenants apart.
+- The API spec is in `docs/salesblink-openapi.json`. `tests/integration/salesblink.test.ts` runs the whole flow against a mock that follows it.
+
 ## Quick start
 
 ```bash

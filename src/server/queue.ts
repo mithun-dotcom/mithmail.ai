@@ -11,6 +11,7 @@ export const QUEUES = {
   webhooks: "webhooks",
   placement: "placement-test",
   ai: "ai-tasks",
+  salesblink: "salesblink",
 } as const;
 
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];
@@ -67,6 +68,14 @@ export interface IcebreakerJob {
   campaignId: string;
   leadIds: string[];
 }
+export type SalesblinkJob =
+  | { kind: "sync"; workspaceId: string }
+  | { kind: "sync-senders"; workspaceId: string }
+  | { kind: "launch"; campaignId: string }
+  | { kind: "push-leads"; campaignId: string }
+  | { kind: "remove-leads"; campaignId: string; emails: string[] }
+  | { kind: "push-senders"; workspaceId: string }
+  | { kind: "fanout" };
 export interface PlacementJob {
   kind: "check";
   testId: string;

@@ -28,7 +28,7 @@ export async function planWarmup(now = new Date()): Promise<number> {
   const slotsLeft = Math.max(1, Math.ceil(((ACTIVE_HOURS_UTC.end - hour) * 60 - now.getUTCMinutes()) / PLAN_EVERY_MIN));
 
   const pool = await db.emailAccount.findMany({
-    where: { isWarmupEnabled: true, status: "ACTIVE" },
+    where: { isWarmupEnabled: true, status: "ACTIVE", salesblinkSenderId: null }, // SalesBlink warms its own senders
     select: { id: true, workspaceId: true, emailAddress: true, warmupStartedAt: true, warmupRampUp: true, warmupDailyLimit: true },
   });
   if (pool.length < 2) return 0;

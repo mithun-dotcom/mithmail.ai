@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { deleteWebhook, removeFromBlocklist, removeMember, renameWorkspace, revokeApiKey, toggleWebhook } from "./actions";
-import { ApiKeyForm, BlocklistForm, InviteForm, WebhookForm } from "./forms";
+import { ApiKeyForm, BlocklistForm, InviteForm, SendingEngineForm, WebhookForm } from "./forms";
 
 export default async function SettingsPage() {
   const { workspace, role } = await requireWorkspace();
@@ -21,6 +21,8 @@ export default async function SettingsPage() {
     db.emailAccount.count({ where: { workspaceId: workspace.id } }),
   ]);
   const editable = canEdit(role);
+  const sbState = workspace.salesblinkSyncState as { sendersAt?: number } | null;
+  const sbLastSync = sbState?.sendersAt ? new Date(sbState.sendersAt) : null;
 
   return (
     <>
@@ -38,6 +40,19 @@ export default async function SettingsPage() {
               <Input name="name" defaultValue={workspace.name} disabled={!editable} />
               <Button variant="outline" disabled={!editable}>Rename</Button>
             </form>
+          </CardContent>
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Sending engine</CardTitle>
+            <CardDescription>
+              Which system sends your campaigns and warms up your inboxes. Applies to new campaigns; running campaigns keep their engine.
+              {workspace.sendingEngine === "SALESBLINK" && sbLastSync && <> Last SalesBlink sync {formatDistanceToNow(sbLastSync)} ago.</>}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SendingEngineForm engine={workspace.sendingEngine} hasKey={!!workspace.salesblinkApiKeyEnc} envKey={!!process.env.SALESBLINK_API_KEY} canEdit={role === "OWNER"} />
           </CardContent>
         </Card>
 

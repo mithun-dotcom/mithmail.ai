@@ -174,6 +174,8 @@ export async function enrollSubsequences(parentCampaignId: string, leadId: strin
       create: { campaignId: s.id, leadId, nextSendAt: new Date() },
       update: {},
     });
+    const { queueLeadPush } = await import("@/server/salesblink/service");
+    await queueLeadPush(s.id).catch(() => undefined);
   }
   return subs.length;
 }

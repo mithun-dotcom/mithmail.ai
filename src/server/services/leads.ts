@@ -2,6 +2,7 @@ import type { LeadEsp, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { detectEsp } from "@/lib/dns";
 import { domainOf } from "@/lib/utils";
+import { queueLeadPush } from "@/server/salesblink/service";
 
 export interface LeadInput {
   email: string;
@@ -115,6 +116,7 @@ export async function importLeads(workspaceId: string, inputs: LeadInput[], camp
     result.addedToCampaign = (
       await db.campaignLead.createMany({ data: ids.map((l) => ({ campaignId, leadId: l.id })), skipDuplicates: true })
     ).count;
+    if (result.addedToCampaign) await queueLeadPush(campaignId);
   }
   return result;
 }

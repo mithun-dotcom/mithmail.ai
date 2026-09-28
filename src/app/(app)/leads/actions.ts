@@ -5,6 +5,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireWorkspace } from "@/server/workspace";
 import { importLeads, type ImportResult, type LeadInput } from "@/server/services/leads";
+import { queueLeadPush } from "@/server/salesblink/service";
 
 const leadInput = z.object({
   email: z.string(),
@@ -42,6 +43,7 @@ export async function addLeadsToCampaign(ids: string[], campaignId: string) {
     select: { id: true },
   });
   const res = await db.campaignLead.createMany({ data: leads.map((l) => ({ campaignId: campaign.id, leadId: l.id })), skipDuplicates: true });
+  if (res.count) await queueLeadPush(campaign.id);
   revalidatePath(`/campaigns/${campaignId}`);
   return res.count;
 }

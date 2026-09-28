@@ -13,6 +13,20 @@ import { requireWorkspace } from "@/server/workspace";
 import { transportFor } from "@/server/mail/pool";
 import { enrollSubsequences } from "@/server/inbox/reply-processor";
 import { emitEvent } from "@/server/services/webhooks";
+import { clientFor, SB_THREAD_PREFIX } from "@/server/salesblink/service";
+
+const SB_OUTCOME: Partial<Record<ThreadSummaryStatus, string>> = {
+  INTERESTED: "positive",
+  MEETING_BOOKED: "positive",
+  NOT_INTERESTED: "negative",
+  NEUTRAL: "neutral",
+};
+
+/** SalesBlink thread handle (their messageId) if this conversation lives on SalesBlink. */
+function sbThreadId(messages: { inReplyTo: string | null }[]): string | null {
+  const m = [...messages].reverse().find((x) => x.inReplyTo?.startsWith(SB_THREAD_PREFIX));
+  return m ? m.inReplyTo!.slice(SB_THREAD_PREFIX.length) : null;
+}
 
 const LABELS = ["INTERESTED", "MEETING_BOOKED", "NOT_INTERESTED", "OUT_OF_OFFICE", "WRONG_PERSON", "UNSUBSCRIBE_REQUEST", "NEUTRAL"] as const;
 
@@ -24,8 +38,10 @@ async function ownThread(id: string, minRole: "VIEWER" | "ADMIN" = "VIEWER") {
 }
 
 export async function markRead(id: string, isRead = true) {
-  await ownThread(id);
+  const { thread, workspace } = await ownThread(id);
   await db.thread.update({ where: { id }, data: { isRead } });
+  const sbId = sbThreadId(thread.messages);
+  if (sbId) await clientFor(workspace).updateMail(sbId, { unread: !isRead }).catch(() => undefined);
   revalidatePath("/unibox");
 }
 
@@ -33,6 +49,8 @@ export async function setLabel(id: string, label: ThreadSummaryStatus | null) {
   const { thread, workspace } = await ownThread(id, "ADMIN");
   const parsed = label === null ? null : z.enum(LABELS).parse(label);
   await db.thread.update({ where: { id }, data: { summaryStatus: parsed } });
+  const sbId = sbThreadId(thread.messages);
+  if (sbId && parsed && SB_OUTCOME[parsed]) await clientFor(workspace).updateMail(sbId, { outcome: SB_OUTCOME[parsed] }).catch(() => undefined);
   if (parsed && thread.leadId && thread.campaignId && parsed !== thread.summaryStatus) {
     await enrollSubsequences(thread.campaignId, thread.leadId, parsed);
     const event = parsed === "INTERESTED" ? "lead.interested" : parsed === "MEETING_BOOKED" ? "lead.meeting_booked" : parsed === "NOT_INTERESTED" ? "lead.not_interested" : null;
@@ -45,6 +63,38 @@ export async function sendReply(threadId: string, body: string): Promise<{ error
   const { thread, workspace } = await ownThread(threadId, "ADMIN");
   const text = z.string().trim().min(1).max(20000).safeParse(body);
   if (!text.success) return { error: "Write a message first." };
+
+  // SalesBlink conversation: reply through SalesBlink (same sender, same thread).
+  const sbId = sbThreadId(thread.messages);
+  if (sbId) {
+    const html = textToHtml(text.data);
+    try {
+      await clientFor(workspace).reply(sbId, html);
+    } catch (e) {
+      return { error: `SalesBlink: ${(e as Error).message}` };
+    }
+    const lastIn = [...thread.messages].reverse().find((m) => m.direction === "INBOUND");
+    const now = new Date();
+    await db.$transaction([
+      db.message.create({
+        data: {
+          threadId,
+          emailAccountId: lastIn?.emailAccountId ?? null,
+          direction: "OUTBOUND",
+          messageId: `sb:reply:${randomUUID()}`,
+          inReplyTo: `${SB_THREAD_PREFIX}${sbId}`,
+          fromEmail: lastIn?.toEmail || "via SalesBlink",
+          toEmail: thread.leadEmail,
+          subject: lastIn?.subject ? (/^re:/i.test(lastIn.subject) ? lastIn.subject : `Re: ${lastIn.subject}`) : thread.subject,
+          body: html,
+          receivedAt: now,
+        },
+      }),
+      db.thread.update({ where: { id: threadId }, data: { lastMessageAt: now, isRead: true } }),
+    ]);
+    revalidatePath("/unibox");
+    return { ok: true };
+  }
 
   // Reply from the inbox the lead last wrote to (or last emailed them from).
   const lastInbound = [...thread.messages].reverse().find((m) => m.direction === "INBOUND");

@@ -9,6 +9,7 @@ import { encrypt } from "@/lib/crypto";
 import { requireWorkspace } from "@/server/workspace";
 import { testConnection } from "@/server/mail/clients";
 import { refreshDomainHealth } from "@/server/services/domain-health";
+import { clientFor, pushSenderSettings, syncSenders } from "@/server/salesblink/service";
 
 export type ActionState = { ok?: boolean; error?: string; message?: string };
 
@@ -48,6 +49,34 @@ export async function addSmtpAccount(_: ActionState, formData: FormData): Promis
   }
   if (await db.emailAccount.findUnique({ where: { workspaceId_emailAddress: { workspaceId: workspace.id, emailAddress: d.emailAddress } } })) {
     return { error: "This inbox is already connected." };
+  }
+
+  if (workspace.sendingEngine === "SALESBLINK") {
+    // SalesBlink holds the credentials and verifies the connection itself.
+    try {
+      await clientFor(workspace).addSender({
+        from_email: d.emailAddress,
+        from_name: d.fromName || undefined,
+        user_name: d.smtpUser,
+        password: d.smtpPass,
+        smtp_host: d.smtpHost,
+        smtp_port: d.smtpPort,
+        imap_host: d.imapHost,
+        imap_port: d.imapPort,
+        imap_user_name: d.imapUser || d.smtpUser,
+        imap_password: d.imapPass || d.smtpPass,
+        warmup_enabled: true,
+        auto_ramp_up_enabled: true,
+        sequence_max_daily_frequency: d.dailyLimit,
+      });
+      await syncSenders(workspace.id, { healthBudget: 3 });
+    } catch (e) {
+      return { error: `SalesBlink: ${(e as Error).message}` };
+    }
+    const acct = await db.emailAccount.findUnique({ where: { workspaceId_emailAddress: { workspaceId: workspace.id, emailAddress: d.emailAddress } } });
+    revalidatePath("/accounts");
+    if (acct) redirect(`/accounts/${acct.id}`);
+    return { ok: true, message: "Added to SalesBlink. It will appear here once SalesBlink finishes connecting it." };
   }
 
   const data = {
@@ -180,6 +209,14 @@ export async function updateAccount(id: string, _: ActionState, formData: FormDa
       trackingDomainId,
     },
   });
+  const updated = await db.emailAccount.findUniqueOrThrow({ where: { id } });
+  if (updated.salesblinkSenderId) {
+    try {
+      await pushSenderSettings(updated);
+    } catch (e) {
+      return { error: `Saved in MithMill, but SalesBlink rejected the update: ${(e as Error).message}` };
+    }
+  }
   if (d.dkimSelector !== undefined) {
     await db.domainHealth.updateMany({ where: { emailAccountId: id }, data: { dkimSelector: d.dkimSelector || null } });
   }
@@ -189,7 +226,19 @@ export async function updateAccount(id: string, _: ActionState, formData: FormDa
 }
 
 export async function testAccount(id: string): Promise<ActionState> {
-  const { account } = await ownAccount(id);
+  const { account, workspace } = await ownAccount(id);
+  if (account.salesblinkSenderId) {
+    try {
+      const client = clientFor(workspace);
+      await client.reconnectSender(account.salesblinkSenderId);
+      const { refreshSenderHealth } = await import("@/server/salesblink/service");
+      await refreshSenderHealth(client, account);
+    } catch (e) {
+      return { error: `SalesBlink: ${(e as Error).message}` };
+    }
+    revalidatePath(`/accounts/${id}`);
+    return { ok: true, message: "Reconnect requested in SalesBlink. Health refreshed." };
+  }
   const errors = await testConnection(account);
   await db.emailAccount.update({
     where: { id },
@@ -213,6 +262,17 @@ export async function setAccountStatus(id: string, status: "ACTIVE" | "PAUSED") 
   await db.emailAccount.update({ where: { id }, data: { status } });
   revalidatePath("/accounts");
   revalidatePath(`/accounts/${id}`);
+}
+
+export async function syncSalesblinkAccounts(): Promise<ActionState> {
+  const { workspace } = await requireWorkspace("ADMIN");
+  try {
+    const r = await syncSenders(workspace.id, { healthBudget: 10 });
+    revalidatePath("/accounts");
+    return { ok: true, message: `Synced ${r.senders} SalesBlink inboxes.` };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
 }
 
 export async function deleteAccount(id: string) {

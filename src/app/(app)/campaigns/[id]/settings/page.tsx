@@ -5,10 +5,14 @@ import { SettingsForm } from "./settings-form";
 export default async function CampaignSettingsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { workspace } = await requireWorkspace();
-  const [c, accounts, others] = await Promise.all([
-    db.campaign.findFirstOrThrow({ where: { id, workspaceId: workspace.id }, include: { emailAccounts: true } }),
+  const c = await db.campaign.findFirstOrThrow({ where: { id, workspaceId: workspace.id }, include: { emailAccounts: true } });
+  const [accounts, others] = await Promise.all([
     db.emailAccount.findMany({
-      where: { workspaceId: workspace.id },
+      where: {
+        workspaceId: workspace.id,
+        // Each engine can only send from its own inboxes.
+        salesblinkSenderId: c.engine === "SALESBLINK" ? { not: null } : null,
+      },
       select: { id: true, emailAddress: true, provider: true, status: true, dailyLimit: true },
       orderBy: { emailAddress: "asc" },
     }),
@@ -30,6 +34,8 @@ export default async function CampaignSettingsPage({ params }: { params: Promise
         emailAccountIds: c.emailAccounts.map((a) => a.emailAccountId),
       }}
       subsequence={{ parentCampaignId: c.parentCampaignId, triggerLabel: c.triggerLabel }}
+      engine={c.engine}
+      locked={!!c.sbSequenceId}
     />
   );
 }

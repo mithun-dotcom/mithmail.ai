@@ -10,7 +10,11 @@ import { logger } from "./logger";
 /** Fans out one fetch job per IMAP-capable inbox. jobId de-duplicates overlapping runs. */
 export async function enqueueInboxSyncs() {
   const accounts = await db.emailAccount.findMany({
-    where: { status: { in: ["ACTIVE", "PAUSED"] }, OR: [{ imapHost: { not: null } }, { provider: { in: ["GOOGLE", "MICROSOFT"] } }] },
+    where: {
+      status: { in: ["ACTIVE", "PAUSED"] },
+      salesblinkSenderId: null, // SalesBlink monitors its own inboxes
+      OR: [{ imapHost: { not: null } }, { oauthRefreshTokenEnc: { not: null } }],
+    },
     select: { id: true },
   });
   const slot = Math.floor(Date.now() / 300_000);

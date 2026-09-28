@@ -8,9 +8,40 @@ import { SmtpForm } from "./smtp-form";
 import { BulkImport } from "./bulk-import";
 
 export default async function NewAccountPage() {
-  await requireWorkspace("ADMIN");
+  const { workspace } = await requireWorkspace("ADMIN");
+  const sb = workspace.sendingEngine === "SALESBLINK";
   const googleReady = !!process.env.AUTH_GOOGLE_ID;
   const msReady = !!process.env.AUTH_MICROSOFT_ENTRA_ID_ID;
+
+  if (sb) {
+    return (
+      <>
+        <PageHeader title="Connect inboxes" description="Your workspace sends through SalesBlink, so inboxes are connected there and synced into MithMill." />
+        <div className="grid gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Google, Microsoft or any SMTP inbox</CardTitle>
+              <CardDescription>Opens SalesBlink&apos;s secure connection page. Connected inboxes appear here automatically (or click Sync on the Email accounts page).</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <a href="/api/salesblink/connect" target="_blank" rel="noopener" className={buttonVariants({ variant: "gold" })}>
+                Connect in SalesBlink ↗
+              </a>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>SMTP / IMAP</CardTitle>
+              <CardDescription>Or add an SMTP inbox here — MithMill passes the credentials to SalesBlink and doesn&apos;t store them.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <SmtpForm />
+            </CardContent>
+          </Card>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>

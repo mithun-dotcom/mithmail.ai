@@ -96,7 +96,8 @@ export async function runSchedulerTick(now = new Date()): Promise<{ queued: numb
   const r = await redis();
   const dayStart = startOfUtcDay(now);
   const campaigns = await db.campaign.findMany({
-    where: { status: "ACTIVE" },
+    // SalesBlink-engine campaigns are scheduled and sent by SalesBlink.
+    where: { status: "ACTIVE", engine: "BUILTIN" },
     include: {
       schedule: true,
       steps: { orderBy: { stepNumber: "asc" }, select: { id: true, stepNumber: true } },
