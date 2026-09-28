@@ -91,7 +91,10 @@ let sharedRedis: import("ioredis").Redis | null = null;
 /** Plain ioredis client for app-level keys (pacing, locks). */
 export async function redis() {
   if (!sharedRedis) {
-    const { Redis } = await import("ioredis");
+    // Next's server bundle can expose the CJS module only as `default`, without the named export.
+    const mod = (await import("ioredis")) as unknown as { Redis?: typeof import("ioredis").Redis; default?: typeof import("ioredis").Redis & { Redis?: typeof import("ioredis").Redis } };
+    const Redis = mod.Redis ?? mod.default?.Redis ?? mod.default;
+    if (!Redis) throw new Error("ioredis failed to load");
     sharedRedis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", { maxRetriesPerRequest: 3 });
   }
   return sharedRedis;
