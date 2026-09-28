@@ -79,7 +79,7 @@ export async function sendWarmupEmail(senderId: string, recipientId: string) {
     from: sender.fromName ? { name: sender.fromName, address: sender.emailAddress } : sender.emailAddress,
     to: recipient.emailAddress,
     subject: content.subject,
-    text: content.body,
+    text: sender.warmupTag ? `${content.body}\n\n${sender.warmupTag}` : content.body,
     messageId,
     headers: { [WARMUP_HEADER]: id },
   });

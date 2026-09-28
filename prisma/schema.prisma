@@ -301,6 +301,13 @@ model EmailAccount {
   maxDelaySeconds  Int     @default(300)
   signature        String? @db.Text
   trackingDomainId String? @db.Uuid
+  replyTo          String?
+
+  // Campaign ramp-up: start at campaignRampUpStart/day, +campaignRampUpIncrement/day until dailyLimit.
+  campaignRampUpEnabled   Boolean   @default(false)
+  campaignRampUpStart     Int       @default(3)
+  campaignRampUpIncrement Int       @default(1)
+  campaignRampUpStartedAt DateTime?
 
   // SalesBlink-managed inbox (engine = SALESBLINK): no local credentials.
   salesblinkSenderId String?
@@ -314,6 +321,7 @@ model EmailAccount {
   warmupDailyLimit Int       @default(20)
   warmupRampUp     Int       @default(2) // +N warm-up emails per day until warmupDailyLimit
   warmupReplyRate  Int       @default(30) // percent of received warm-ups to reply to
+  warmupTag        String? // unique string included in warm-up emails so they can be filtered
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

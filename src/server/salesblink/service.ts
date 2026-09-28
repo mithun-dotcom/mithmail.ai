@@ -141,6 +141,12 @@ export async function pushSenderSettings(account: EmailAccount) {
     ramp_up_frequency: Math.min(50, account.warmupRampUp),
     max_daily_frequency: Math.min(50, account.warmupDailyLimit),
     sequence_max_daily_frequency: account.dailyLimit,
+    sequence_auto_ramp_up_enabled: account.campaignRampUpEnabled,
+    ...(account.campaignRampUpEnabled
+      ? { sequence_initial_daily_frequency: Math.min(account.dailyLimit, account.campaignRampUpStart), sequence_ramp_up_frequency: account.campaignRampUpIncrement }
+      : {}),
+    ...(account.replyTo ? { reply_to: account.replyTo } : {}),
+    ...(account.warmupTag ? { warmup_keyword: account.warmupTag } : {}),
     pause_cold_emails_when_health_low: true,
     pause_cold_emails_health_threshold: 60,
   });

@@ -86,7 +86,7 @@ export default async function DashboardPage() {
             </CardHeader>
             <CardContent className="grid gap-2">
               {attention.slice(0, 8).map((a) => (
-                <Link key={a.id} href={`/accounts/${a.id}`} className="flex items-start gap-2 rounded-md border p-2 text-sm hover:bg-muted/50">
+                <Link key={a.id} href={`/accounts?account=${a.id}`} className="flex items-start gap-2 rounded-md border p-2 text-sm hover:bg-muted/50">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                   <span className="min-w-0">
                     <span className="block truncate font-medium">{a.emailAddress}</span>

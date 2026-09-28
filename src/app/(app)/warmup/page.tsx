@@ -67,7 +67,7 @@ export default async function WarmupPage() {
                 const rate = sent ? 100 - pct(spam, sent) : null;
                 return (
                   <tr key={a.id}>
-                    <td><Link href={`/accounts/${a.id}`} className="font-medium text-royal-800 hover:underline">{a.emailAddress}</Link></td>
+                    <td><Link href={`/accounts?account=${a.id}`} className="font-medium text-royal-800 hover:underline">{a.emailAddress}</Link></td>
                     <td>{a.isWarmupEnabled ? <Badge variant="warning">on</Badge> : <Badge variant="muted">off</Badge>}</td>
                     <td className="text-xs text-muted-foreground">
                       {a.salesblinkSenderId ? "managed by SalesBlink" : a.isWarmupEnabled ? `day ${day} · target ${dailyWarmupTarget(a)}/day` : "—"}

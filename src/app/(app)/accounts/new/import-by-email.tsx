@@ -21,7 +21,7 @@ export function ImportByEmail() {
         start(async () => {
           const r = await importSalesblinkInbox(email);
           setState(r);
-          if (r.accountId) router.push(`/accounts/${r.accountId}?connected=1`);
+          if (r.accountId) router.push(`/accounts?account=${r.accountId}&connected=1`);
         });
       }}
     >

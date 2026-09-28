@@ -52,9 +52,23 @@ export function assignLeads<L extends { id: string; lead: Pick<Lead, "esp"> }, A
  * Effective daily limit: 80–100% of the configured limit, varying by day but stable
  * within a day, so volume never shows a flat, machine-like pattern.
  */
-export function effectiveDailyLimit(account: Pick<EmailAccount, "id" | "dailyLimit">, day: Date): number {
+export function effectiveDailyLimit(
+  account: Pick<EmailAccount, "id" | "dailyLimit"> & Partial<Pick<EmailAccount, "campaignRampUpEnabled" | "campaignRampUpStart" | "campaignRampUpIncrement" | "campaignRampUpStartedAt">>,
+  day: Date,
+): number {
   const f = 0.8 + seededRng(`${account.id}:${day.toISOString().slice(0, 10)}`)() * 0.2;
-  return Math.max(1, Math.round(account.dailyLimit * f));
+  return Math.max(1, Math.round(rampedDailyLimit(account, day) * f));
+}
+
+/** Campaign ramp-up: start/day on day 1, +increment per day, capped at the daily limit. */
+export function rampedDailyLimit(
+  account: Pick<EmailAccount, "dailyLimit"> & Partial<Pick<EmailAccount, "campaignRampUpEnabled" | "campaignRampUpStart" | "campaignRampUpIncrement" | "campaignRampUpStartedAt">>,
+  day: Date,
+): number {
+  if (!account.campaignRampUpEnabled || !account.campaignRampUpStartedAt) return account.dailyLimit;
+  const days = Math.max(0, Math.floor((day.getTime() - account.campaignRampUpStartedAt.getTime()) / 86_400_000));
+  const target = (account.campaignRampUpStart ?? 3) + days * (account.campaignRampUpIncrement ?? 1);
+  return Math.max(1, Math.min(account.dailyLimit, target));
 }
 
 interface AccountState {

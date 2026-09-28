@@ -88,6 +88,7 @@ export function composeEmail(input: ComposeInput): ComposedEmail {
 
   const base = trackingBaseUrl(account.trackingDomain);
   const headers: Record<string, string> = { "X-Mailer-Campaign": campaign.id.slice(0, 8) };
+  if (account.replyTo) headers["Reply-To"] = account.replyTo;
   const plainOnly = campaign.sendAsPlainText;
 
   // Tracking is applied to the HTML part only; the text part keeps the real URLs.

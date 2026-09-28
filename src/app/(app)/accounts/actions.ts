@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import type { EmailAccount } from "@prisma/client";
+import type { EmailAccount, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { encrypt } from "@/lib/crypto";
 import { requireWorkspace } from "@/server/workspace";
@@ -76,7 +76,7 @@ export async function addSmtpAccount(_: ActionState, formData: FormData): Promis
     }
     const acct = await db.emailAccount.findUnique({ where: { workspaceId_emailAddress: { workspaceId: workspace.id, emailAddress: d.emailAddress } } });
     revalidatePath("/accounts");
-    if (acct) redirect(`/accounts/${acct.id}`);
+    if (acct) redirect(`/accounts?account=${acct.id}&connected=1`);
     return { ok: true, message: "Added to SalesBlink. It will appear here once SalesBlink finishes connecting it." };
   }
 
@@ -104,7 +104,7 @@ export async function addSmtpAccount(_: ActionState, formData: FormData): Promis
   const account = await db.emailAccount.create({ data });
   await refreshDomainHealth(account.id).catch(() => undefined);
   revalidatePath("/accounts");
-  redirect(`/accounts/${account.id}`);
+  redirect(`/accounts?account=${account.id}&connected=1`);
 }
 
 const bulkRow = z.object({
@@ -181,18 +181,27 @@ export async function bulkImportAccounts(rows: Record<string, string>[]): Promis
   };
 }
 
-const settingsSchema = z.object({
-  fromName: z.string().trim().max(80).optional(),
+const accountSettingsSchema = z.object({
+  firstName: z.string().trim().max(60).optional(),
+  lastName: z.string().trim().max(60).optional(),
+  replyTo: z.union([z.literal(""), z.string().trim().email()]).optional(),
   dailyLimit: z.coerce.number().int().min(1).max(500),
-  minDelaySeconds: z.coerce.number().int().min(0).max(3600),
-  maxDelaySeconds: z.coerce.number().int().min(0).max(7200),
+  minIntervalMinutes: z.coerce.number().min(0).max(120),
+  maxIntervalMinutes: z.coerce.number().min(0).max(240),
+  campaignRampUpEnabled: z.string().optional(),
+  campaignRampUpStart: z.coerce.number().int().min(1).max(500),
+  campaignRampUpIncrement: z.coerce.number().int().min(1).max(100),
   signature: z.string().max(5000).optional(),
-  isWarmupEnabled: z.string().optional(),
-  warmupDailyLimit: z.coerce.number().int().min(1).max(100),
-  warmupRampUp: z.coerce.number().int().min(1).max(20),
-  warmupReplyRate: z.coerce.number().int().min(0).max(100),
   trackingDomainId: z.string().optional(),
   dkimSelector: z.string().trim().max(63).optional(),
+});
+
+const warmupSettingsSchema = z.object({
+  isWarmupEnabled: z.string().optional(),
+  warmupTag: z.string().trim().max(60).optional(),
+  warmupDailyLimit: z.coerce.number().int().min(1).max(50),
+  warmupRampUp: z.coerce.number().int().min(1).max(20),
+  warmupReplyRate: z.coerce.number().int().min(0).max(100),
 });
 
 async function ownAccount(id: string) {
@@ -202,35 +211,14 @@ async function ownAccount(id: string) {
   return { account, workspace };
 }
 
-export async function updateAccount(id: string, _: ActionState, formData: FormData): Promise<ActionState> {
-  const { workspace, account } = await ownAccount(id);
-  const p = settingsSchema.safeParse(Object.fromEntries(formData));
-  if (!p.success) return { error: p.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") };
-  const d = p.data;
-  if (d.maxDelaySeconds < d.minDelaySeconds) return { error: "Max delay must be ≥ min delay." };
+function issues(e: z.ZodError) {
+  return e.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
+}
 
-  let trackingDomainId: string | null = null;
-  if (d.trackingDomainId) {
-    const td = await db.trackingDomain.findFirst({ where: { id: d.trackingDomainId, workspaceId: workspace.id } });
-    trackingDomainId = td?.id ?? null;
-  }
-  await db.emailAccount.update({
-    where: { id },
-    data: {
-      fromName: d.fromName || null,
-      dailyLimit: d.dailyLimit,
-      minDelaySeconds: d.minDelaySeconds,
-      maxDelaySeconds: d.maxDelaySeconds,
-      signature: d.signature || null,
-      isWarmupEnabled: d.isWarmupEnabled === "on",
-      ...(d.isWarmupEnabled === "on" && !account.warmupStartedAt ? { warmupStartedAt: new Date() } : {}),
-      warmupDailyLimit: d.warmupDailyLimit,
-      warmupRampUp: d.warmupRampUp,
-      warmupReplyRate: d.warmupReplyRate,
-      trackingDomainId,
-    },
-  });
-  const updated = await db.emailAccount.findUniqueOrThrow({ where: { id } });
+/** Saves locally, then pushes to SalesBlink for SalesBlink-managed inboxes. */
+async function saveAndPush(id: string, data: Prisma.EmailAccountUpdateInput): Promise<ActionState> {
+  const updated = await db.emailAccount.update({ where: { id }, data });
+  revalidatePath("/accounts");
   if (updated.salesblinkSenderId) {
     try {
       await pushSenderSettings(updated);
@@ -238,12 +226,55 @@ export async function updateAccount(id: string, _: ActionState, formData: FormDa
       return { error: `Saved in MithMill, but SalesBlink rejected the update: ${(e as Error).message}` };
     }
   }
+  return { ok: true, message: updated.salesblinkSenderId ? "Saved and synced to SalesBlink." : "Saved." };
+}
+
+export async function updateAccountSettings(id: string, _: ActionState, formData: FormData): Promise<ActionState> {
+  const { workspace, account } = await ownAccount(id);
+  const p = accountSettingsSchema.safeParse(Object.fromEntries(formData));
+  if (!p.success) return { error: issues(p.error) };
+  const d = p.data;
+  if (d.maxIntervalMinutes < d.minIntervalMinutes) return { error: "Maximum interval must be at least the minimum interval." };
+
+  let trackingDomainId: string | null = null;
+  if (d.trackingDomainId) {
+    const td = await db.trackingDomain.findFirst({ where: { id: d.trackingDomainId, workspaceId: workspace.id } });
+    trackingDomainId = td?.id ?? null;
+  }
+  const fromName = [d.firstName, d.lastName].filter(Boolean).join(" ");
+  const rampOn = d.campaignRampUpEnabled === "on";
   if (d.dkimSelector !== undefined) {
     await db.domainHealth.updateMany({ where: { emailAccountId: id }, data: { dkimSelector: d.dkimSelector || null } });
   }
-  revalidatePath(`/accounts/${id}`);
-  revalidatePath("/accounts");
-  return { ok: true, message: "Saved." };
+  return saveAndPush(id, {
+    fromName: fromName || null,
+    replyTo: d.replyTo || null,
+    dailyLimit: d.dailyLimit,
+    minDelaySeconds: Math.round(d.minIntervalMinutes * 60),
+    maxDelaySeconds: Math.round(d.maxIntervalMinutes * 60),
+    campaignRampUpEnabled: rampOn,
+    campaignRampUpStart: d.campaignRampUpStart,
+    campaignRampUpIncrement: d.campaignRampUpIncrement,
+    campaignRampUpStartedAt: rampOn ? (account.campaignRampUpStartedAt ?? new Date()) : null,
+    signature: d.signature || null,
+    trackingDomain: trackingDomainId ? { connect: { id: trackingDomainId } } : { disconnect: true },
+  });
+}
+
+export async function updateWarmupSettings(id: string, _: ActionState, formData: FormData): Promise<ActionState> {
+  const { account } = await ownAccount(id);
+  const p = warmupSettingsSchema.safeParse(Object.fromEntries(formData));
+  if (!p.success) return { error: issues(p.error) };
+  const d = p.data;
+  const on = d.isWarmupEnabled === "on";
+  return saveAndPush(id, {
+    isWarmupEnabled: on,
+    ...(on && !account.warmupStartedAt ? { warmupStartedAt: new Date() } : {}),
+    warmupTag: d.warmupTag || null,
+    warmupDailyLimit: d.warmupDailyLimit,
+    warmupRampUp: d.warmupRampUp,
+    warmupReplyRate: d.warmupReplyRate,
+  });
 }
 
 export async function testAccount(id: string): Promise<ActionState> {
@@ -257,7 +288,7 @@ export async function testAccount(id: string): Promise<ActionState> {
     } catch (e) {
       return { error: `SalesBlink: ${(e as Error).message}` };
     }
-    revalidatePath(`/accounts/${id}`);
+    revalidatePath("/accounts");
     return { ok: true, message: "Reconnect requested in SalesBlink. Health refreshed." };
   }
   const errors = await testConnection(account);
@@ -265,14 +296,14 @@ export async function testAccount(id: string): Promise<ActionState> {
     where: { id },
     data: errors.length ? { status: "ERROR", lastError: errors.join(" · ") } : { status: account.status === "ERROR" ? "ACTIVE" : account.status, lastError: null },
   });
-  revalidatePath(`/accounts/${id}`);
+  revalidatePath("/accounts");
   return errors.length ? { error: errors.join(" · ") } : { ok: true, message: "SMTP and IMAP connected successfully." };
 }
 
 export async function recheckDns(id: string): Promise<ActionState> {
   await ownAccount(id);
   await refreshDomainHealth(id);
-  revalidatePath(`/accounts/${id}`);
+  revalidatePath("/accounts");
   revalidatePath("/accounts");
   revalidatePath("/deliverability");
   return { ok: true, message: "DNS re-checked." };
@@ -282,7 +313,7 @@ export async function setAccountStatus(id: string, status: "ACTIVE" | "PAUSED") 
   await ownAccount(id);
   await db.emailAccount.update({ where: { id }, data: { status } });
   revalidatePath("/accounts");
-  revalidatePath(`/accounts/${id}`);
+  revalidatePath("/accounts");
 }
 
 export async function syncSalesblinkAccounts(): Promise<ActionState> {

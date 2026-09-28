@@ -42,7 +42,7 @@ export function OAuthConnectButton({ provider, label }: { provider: "google" | "
     if (res.accountId) {
       done.current = true;
       popup.current?.close();
-      router.push(`/accounts/${res.accountId}?connected=1`);
+      router.push(`/accounts?account=${res.accountId}&connected=1`);
       return true;
     }
     if (res.error) setNote(`SalesBlink: ${res.error}`);

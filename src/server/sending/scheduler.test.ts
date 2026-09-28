@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LeadEsp } from "@prisma/client";
-import { assignLeads, effectiveDailyLimit, espMatches } from "./scheduler";
+import { assignLeads, effectiveDailyLimit, espMatches, rampedDailyLimit } from "./scheduler";
 
 const lead = (id: string, esp: LeadEsp) => ({ id, lead: { esp } });
 const acct = (id: string, provider: "GOOGLE" | "MICROSOFT" | "SMTP") => ({ id, provider });
@@ -52,5 +52,28 @@ describe("effectiveDailyLimit", () => {
     const a = { id: "acct-2", dailyLimit: 100 };
     const values = new Set(Array.from({ length: 10 }, (_, i) => effectiveDailyLimit(a, new Date(Date.UTC(2026, 8, 1 + i)))));
     expect(values.size).toBeGreaterThan(3);
+  });
+});
+
+describe("rampedDailyLimit", () => {
+  const start = new Date(Date.UTC(2026, 8, 1));
+  const a = { dailyLimit: 20, campaignRampUpEnabled: true, campaignRampUpStart: 3, campaignRampUpIncrement: 2, campaignRampUpStartedAt: start };
+  const day = (n: number) => new Date(start.getTime() + n * 86_400_000);
+
+  it("starts at the initial limit and grows by the increment until the daily limit", () => {
+    expect(rampedDailyLimit(a, day(0))).toBe(3);
+    expect(rampedDailyLimit(a, day(1))).toBe(5);
+    expect(rampedDailyLimit(a, day(5))).toBe(13);
+    expect(rampedDailyLimit(a, day(30))).toBe(20);
+  });
+
+  it("uses the plain daily limit when ramp-up is off", () => {
+    expect(rampedDailyLimit({ ...a, campaignRampUpEnabled: false }, day(0))).toBe(20);
+  });
+
+  it("feeds the jittered effective limit", () => {
+    const v = effectiveDailyLimit({ id: "acc", ...a }, day(0));
+    expect(v).toBeGreaterThanOrEqual(2);
+    expect(v).toBeLessThanOrEqual(3);
   });
 });
