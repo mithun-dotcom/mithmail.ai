@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { appUrl } from "@/lib/utils";
 
 function secret() {
   const s = process.env.AUTH_SECRET ?? process.env.ENCRYPTION_KEY;
@@ -18,7 +19,7 @@ export function verify(value: string, signature: string): boolean {
 
 export function trackingBaseUrl(trackingDomain?: { domainName: string; cnameVerified: boolean } | null): string {
   if (trackingDomain?.cnameVerified) return `https://${trackingDomain.domainName}`;
-  return (process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
+  return appUrl();
 }
 
 export function openPixelUrl(base: string, logId: string) {

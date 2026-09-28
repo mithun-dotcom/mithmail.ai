@@ -1,0 +1,78 @@
+# Render Blueprint — creates the whole MithMill stack:
+#   mithmill-web     Next.js app (free plan)
+#   mithmill-worker  background workers: sending, SalesBlink sync, warm-up, IMAP (Starter plan — Render has no free workers)
+#   mithmill-db      PostgreSQL (free plan: expires after 30 days — upgrade to keep data)
+#   mithmill-redis   Key Value / Redis for job queues (free plan)
+#
+# Render dashboard → New → Blueprint → pick this repo and branch.
+# You'll be asked for the values marked `sync: false`.
+
+services:
+  - type: web
+    name: mithmill-web
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    # Migrations run on start (preDeployCommand needs a paid plan).
+    startCommand: npx prisma migrate deploy && npm start
+    healthCheckPath: /login
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase: { name: mithmill-db, property: connectionString }
+      - key: DIRECT_URL
+        fromDatabase: { name: mithmill-db, property: connectionString }
+      - key: REDIS_URL
+        fromService: { type: keyvalue, name: mithmill-redis, property: connectionString }
+      - fromGroup: mithmill-shared
+
+  - type: worker
+    name: mithmill-worker
+    runtime: node
+    plan: starter
+    buildCommand: npm ci
+    startCommand: npm run worker
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase: { name: mithmill-db, property: connectionString }
+      - key: DIRECT_URL
+        fromDatabase: { name: mithmill-db, property: connectionString }
+      - key: REDIS_URL
+        fromService: { type: keyvalue, name: mithmill-redis, property: connectionString }
+      - fromGroup: mithmill-shared
+
+  - type: keyvalue
+    name: mithmill-redis
+    plan: free
+    maxmemoryPolicy: noeviction # required by BullMQ
+    ipAllowList: [] # private network only
+
+databases:
+  - name: mithmill-db
+    plan: free
+    databaseName: mithmill
+    user: mithmill
+
+envVarGroups:
+  - name: mithmill-shared
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: AUTH_TRUST_HOST
+        value: "true"
+      # Shared by web + worker: must be identical, never change after first deploy.
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        generateValue: true # base64 of 256 random bits = the 32-byte key MithMill expects
+      # Your login (no Google/Microsoft/email login needed to get started).
+      - key: ADMIN_LOGIN_EMAIL
+        sync: false
+      - key: ADMIN_LOGIN_PASSWORD # 12+ characters
+        sync: false
+      # Public URL of mithmill-web, e.g. https://mithmill-web.onrender.com (used for tracking links).
+      - key: APP_URL
+        sync: false
+      - key: SALESBLINK_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false

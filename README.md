@@ -105,6 +105,21 @@ OAuth redirect URIs to register:
 
 ## Deployment
 
+### Render (one click)
+
+`render.yaml` is a Render Blueprint that creates the web app, the worker, Postgres and Redis.
+
+1. In Render: **New → Blueprint**, connect this GitHub repo and choose the branch.
+2. Fill in the prompted values:
+   - `ADMIN_LOGIN_EMAIL` / `ADMIN_LOGIN_PASSWORD` (12+ characters): your login.
+   - `APP_URL`: the web service URL, e.g. `https://mithmill-web.onrender.com`. You can leave it blank at first; the web app falls back to Render's URL, but the worker needs it for tracking links.
+   - `SALESBLINK_API_KEY`, `OPENAI_API_KEY`: optional.
+3. **Apply**. The first deploy runs the database migrations. Open the web URL, sign in, and create a workspace.
+
+The worker uses Render's Starter plan (there are no free workers). Render's free Postgres expires after 30 days, so upgrade it to keep your data. The free web service sleeps when idle, so the first request after a while takes ~30 s.
+
+### Other hosts
+
 * **Web:** deploy the Next.js app (Vercel, or the `Dockerfile`). Tracking routes (`/t/*`) must be reachable at every custom tracking domain, over HTTPS. Terminate TLS for customer CNAMEs at the edge, for example Vercel domains, Cloudflare for SaaS, or Caddy on-demand TLS.
 * **Workers:** run `npm run worker` on a long-lived host (Fly.io, Railway, ECS, a VM). They are stateless; scale horizontally, and split queues with `WORKERS=`. Run **exactly one** process that includes `scheduler`.
 * **Redis:** set `maxmemory-policy noeviction` (BullMQ requirement).
