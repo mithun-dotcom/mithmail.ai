@@ -1,7 +1,11 @@
 import type { Workspace } from "@prisma/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CopyButton } from "@/components/copy-button";
+import { buttonVariants } from "@/components/ui/button";
 import { salesblinkOAuthApps } from "@/server/salesblink/oauth-apps";
+
+/** Google Admin → Security → API controls → App access control ("Configure new app" lives here). */
+const GOOGLE_ADMIN_APPS_URL = "https://admin.google.com/ac/owl/list?tab=configuredApps";
 
 function ClientId({ id }: { id: string | null }) {
   if (!id) return <p className="text-sm text-muted-foreground">Couldn&apos;t read the Client ID from SalesBlink right now. Reload in a minute.</p>;
@@ -27,28 +31,47 @@ export async function AdminApprovalCard({ workspace }: { workspace: Workspace })
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-6 md:grid-cols-2">
-        <div className="grid content-start gap-2">
+        <div className="grid content-start gap-3">
           <p className="text-sm font-medium">Google Workspace</p>
-          <ClientId id={apps.google} />
-          <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
+          <ol className="list-decimal space-y-3 pl-5 text-sm text-muted-foreground">
             <li>
-              Open <b>admin.google.com</b> → <b>Security</b> → <b>Access and data control</b> → <b>API controls</b>.
+              <a href={GOOGLE_ADMIN_APPS_URL} target="_blank" rel="noopener" className={buttonVariants({ size: "sm" })}>
+                Open Google Admin → App access ↗
+              </a>
+              <span className="mt-1 block">Sign in as a Google Workspace super admin.</span>
             </li>
             <li>
-              <b>Manage Third-Party App Access</b> → <b>Add app</b> → <b>OAuth App Name Or Client ID</b>.
+              Click <b>Configure new app</b>, then paste this Client ID into the search box and press Enter:
+              <div className="mt-1.5">
+                <ClientId id={apps.google} />
+              </div>
             </li>
-            <li>Paste the Client ID above, select the app, choose who it applies to.</li>
+            <li>Select the app, choose who it applies to (whole organisation or a group), click <b>Continue</b>.</li>
             <li>
-              Set access to <b>Trusted</b> and click <b>Finish</b>. Then try <b>Connect Google</b> again (it can take a few minutes to apply).
+              Choose <b>Trusted</b> → <b>Continue</b> → <b>Finish</b>. Then click <b>Connect Google</b> again (it can take a few minutes to apply).
             </li>
           </ol>
         </div>
-        <div className="grid content-start gap-2">
+        <div className="grid content-start gap-3">
           <p className="text-sm font-medium">Microsoft 365</p>
-          <ClientId id={apps.microsoft} />
-          <p className="text-sm text-muted-foreground">
-            A Microsoft 365 admin opens this link, signs in and clicks <b>Accept</b> to approve it for the whole organisation:
-          </p>
+          <ol className="list-decimal space-y-3 pl-5 text-sm text-muted-foreground">
+            <li>
+              {msConsent ? (
+                <a href={msConsent} target="_blank" rel="noopener" className={buttonVariants({ size: "sm" })}>
+                  Approve for my organisation ↗
+                </a>
+              ) : (
+                <span>Approval link unavailable right now — reload in a minute.</span>
+              )}
+              <span className="mt-1 block">Sign in as a Microsoft 365 global admin and click <b>Accept</b>. Or send your admin this link:</span>
+            </li>
+            <li>
+              Client ID (if your admin asks for it):
+              <div className="mt-1.5">
+                <ClientId id={apps.microsoft} />
+              </div>
+            </li>
+          </ol>
           {msConsent && (
             <div className="flex items-center gap-2">
               <code className="min-w-0 flex-1 truncate rounded-md border bg-muted px-3 py-2 text-xs">{msConsent}</code>
