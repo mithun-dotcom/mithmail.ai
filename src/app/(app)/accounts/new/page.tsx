@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { Suspense } from "react";
+import { AdminApprovalCard } from "./admin-approval";
 import { requireWorkspace } from "@/server/workspace";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -59,6 +61,9 @@ export default async function NewAccountPage() {
               </CardContent>
             </Card>
           </div>
+          <Suspense fallback={null}>
+            <AdminApprovalCard workspace={workspace} />
+          </Suspense>
           <Card>
             <CardHeader>
               <CardTitle>SMTP / IMAP</CardTitle>

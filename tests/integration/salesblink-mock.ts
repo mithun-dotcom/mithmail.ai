@@ -100,7 +100,7 @@ export async function startSalesblinkMock(apiKey: string | string[]) {
       return send(200, { success: true, data: { login_link: "https://run.salesblink.io/magic?token=abc", destination: "/account/integration/api", purpose: "api-keys" } });
     }
     if (m === "POST" && (match = /^\/oauth\/(google|outlook)$/.exec(path))) {
-      return send(200, { success: true, data: { auth_url: `https://accounts.example/${match[1]}/authorize?state=xyz` } });
+      return send(200, { success: true, data: { auth_url: `https://accounts.example/${match[1]}/authorize?client_id=${match[1] === "google" ? "123456-sbapp.apps.googleusercontent.com" : "9f1c2d3e-sb-ms-app"}&state=xyz` } });
     }
     if (m === "POST" && path === "/senders/add-bulk-senders") {
       state.bulkUploads.push(String((body as Record<string, string>).csvFile ?? ""));
