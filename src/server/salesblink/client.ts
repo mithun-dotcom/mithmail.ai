@@ -189,8 +189,13 @@ export class SalesBlinkClient {
     for (;;) {
       const minute = Math.floor(Date.now() / 60_000);
       const key = `mm:sb:rl:${this.keyId}:${tier}:${minute}`;
-      const n = await r.incr(key);
-      if (n === 1) await r.expire(key, 90);
+      let n: number;
+      try {
+        n = await r.incr(key);
+        if (n === 1) await r.expire(key, 90);
+      } catch {
+        return; // Redis unreachable: fail open and rely on 429 handling
+      }
       if (n <= TIER_LIMIT[tier]) return;
       await sleep((minute + 1) * 60_000 - Date.now() + 250 + Math.random() * 1000);
     }

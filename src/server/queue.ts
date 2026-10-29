@@ -96,6 +96,12 @@ export async function redis() {
     const Redis = mod.Redis ?? mod.default?.Redis ?? mod.default;
     if (!Redis) throw new Error("ioredis failed to load");
     sharedRedis = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", { maxRetriesPerRequest: 3 });
+    let lastLogged = 0;
+    sharedRedis.on("error", (e: Error) => {
+      if (Date.now() - lastLogged < 60_000) return;
+      lastLogged = Date.now();
+      console.error(JSON.stringify({ msg: "redis unavailable", err: e.message }));
+    });
   }
   return sharedRedis;
 }
